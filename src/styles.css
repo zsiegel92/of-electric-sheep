@@ -1,0 +1,33 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: oklch(1 0 0);
+  --color-foreground: oklch(0.145 0 0);
+  --color-primary: oklch(0.205 0 0);
+  --color-primary-foreground: oklch(0.985 0 0);
+  --color-secondary: oklch(0.97 0 0);
+  --color-secondary-foreground: var(--color-primary);
+  --color-muted: var(--color-secondary);
+  --color-muted-foreground: oklch(0.45 0 0);
+  --color-accent: var(--color-secondary);
+  --color-accent-foreground: var(--color-primary);
+  --color-destructive: oklch(0.52 0.2 27);
+  --color-border: oklch(0.922 0 0);
+  --color-input: var(--color-border);
+  --color-ring: oklch(0.65 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+}

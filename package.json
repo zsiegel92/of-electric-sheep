@@ -24,14 +24,19 @@
     "@tanstack/react-router": "^1.170.46",
     "@tanstack/react-start": "^1.169.5",
     "better-auth": "^1.7.25",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
     "drizzle-orm": "^0.45.4",
     "postgres": "^4.1.1",
+    "radix-ui": "^1.8.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
+    "tailwind-merge": "^3.7.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.8",
+    "@tailwindcss/vite": "^4.3.5",
     "@types/node": "^24.19.2",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
@@ -39,6 +44,7 @@
     "dotenv": "^18.0.10",
     "drizzle-kit": "^0.31.11",
     "nitro": "3.0.261103-rc",
+    "tailwindcss": "^4.3.5",
     "tsx": "^4.23.15",
     "typescript": "7.1.0-beta",
     "vite": "^8.3.8"

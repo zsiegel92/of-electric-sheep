@@ -1,10 +1,11 @@
 import "@tanstack/react-start/server-only";
 import { betterAuth } from "better-auth";
 import { z } from "zod";
+import { zodUserSchemaToBetterAuthUserSpec } from "./zod-user-spec";
 
 const envSchema = z.object({
   AUTH_SECRET: z.string().min(32),
-  APP_URL: z.httpUrl().default("http://localhost:5173"),
+  APP_URL: z.url({ protocol: /^https?$/ }).default("http://localhost:5173"),
   GITHUB_CLIENT_ID: z.string().default(""),
   GITHUB_CLIENT_SECRET: z.string().default(""),
 });
@@ -38,9 +39,9 @@ function createAuth() {
         refreshCache: false,
       },
     },
-    user: {
-      additionalFields: { githubId: { type: "string", required: true } },
-    },
+    // Provider-mapped claims can be supplied at sign-in, but cannot be edited.
+    disabledPaths: ["/update-user"],
+    user: zodUserSchemaToBetterAuthUserSpec(userSchema),
     socialProviders:
       env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET
         ? {

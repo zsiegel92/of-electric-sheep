@@ -28,9 +28,11 @@ Set `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` in `.env`, then restart the ap
 
 Add a procedure with `.route()`, `.input()`, `.output()`, and `.handler()`. oRPC validates inputs and outputs at runtime and derives the handler types and OpenAPI spec from the Zod schemas. Procedures get the authenticated user through `context.user`. The Start server functions bridge that same request context into oRPC with `requireUser(context.user)`.
 
-Sign in and open `/api/docs` for Swagger UI or `/api/openapi.json` for the live spec. Use `make openapi > openapi.json` to export it without a server or database. The example profile form calls a Start server function, and `PATCH /api/profile` exposes the same operation through HTTP.
+Sign in and open `/api/docs` for Swagger UI or `/api/openapi.json` for the live spec. Use `make openapi > openapi.json` to export it without a server or database. The navbar uses the root loader and its Start server function to fetch the same viewer data exposed by `GET /api/viewer`.
 
-Better Auth stores the session in a signed HttpOnly JWT cookie. The database stores application data, keyed by the stable `githubId` claim. To add a claim, update `user.additionalFields`, `mapProfileToUser`, and `userSchema` in `src/server/auth.ts`.
+For oRPC routes, add an entry to `afterResponseCallbacks` in `src/routes/api.$.ts` using the procedure name from `src/server/api.ts`. Try `GET /api/viewer` in Swagger on the local Node server for an example. For a native Start route, call `afterResponse(request, callback)` before returning. The callback runs when Nitro's Node transport finishes sending the response. [Node HTTP response events](https://nodejs.org/api/http.html#event-finish)
+
+Better Auth stores the session in a signed HttpOnly JWT cookie. The database schema can use the stable `githubId` claim to key application data. To add a claim, update `userSchema` and populate it in `mapProfileToUser` in `src/server/auth.ts`. The Zod schema supplies Better Auth’s additional field definitions and validators.
 
 ## Database and production
 
