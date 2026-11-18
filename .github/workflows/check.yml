@@ -16,10 +16,7 @@ jobs:
           runtime: node@24
           install: false
           cache: true
-      - uses: astral-sh/setup-uv@v7
-        with:
-          enable-cache: true
       - run: make install
-      - run: make check
-      - run: git diff --exit-code -- web/src/generated && test -z "$(git ls-files --others --exclude-standard web/src/generated)"
       - run: make build
+      - run: make check
+      - run: git diff --exit-code -- src/routeTree.gen.ts

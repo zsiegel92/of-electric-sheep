@@ -1,34 +1,48 @@
 # Of Electric Sheep
 
-FastAPI handles GitHub OAuth and serves the application and Vite build. PostgreSQL is available to application routes.
+One TanStack Start app with Better Auth, oRPC, and Drizzle/PostgreSQL.
 
-## Local development
+## Run locally
 
-Use Node 24+, pnpm, uv, OpenSSL, and PostgreSQL command-line tools.
+Use Node 24+, pnpm, OpenSSL, and the PostgreSQL command-line tools.
 
 ```sh
 make install
 make dev
 ```
 
-`make dev` creates local settings if needed, starts PostgreSQL, and runs FastAPI and Vite concurrently. Visit [localhost:5173](http://localhost:5173). Vite proxies `/api` and `/auth` to FastAPI on port 8080. Press Ctrl+C to stop both servers. Use `make db-stop` to stop PostgreSQL.
+Open [localhost:5173](http://localhost:5173). `make dev` creates `.env` if needed, starts local PostgreSQL on port 54873, applies migrations, and starts Vite. Use `make db-stop` to stop PostgreSQL.
 
-Run `make backend` or `make vite` to start the servers individually. To try the production build locally, stop the dev servers and run `make backend-built`, then visit [localhost:8080](http://localhost:8080).
+Set `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` in `.env`, then restart the app. Register **`http://localhost:5173/api/auth/callback/github`** as a redirect URI on your GitHub OAuth App. The callback path changed in the migration to TanStack Start. `APP_URL` defaults to `http://localhost:5173`.
 
-Set `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` in `.env` before signing in. Add both `http://localhost:5173/auth/callback/github` and `http://localhost:8080/auth/callback/github` as redirect URIs on the same GitHub OAuth App, with wildcard matching disabled. [GitHub supports multiple redirect URIs per OAuth App.](https://github.blog/changelog/2026-08-14-multiple-redirect-uris-and-token-refresh-for-oauth-apps/)
+## Find your way around
 
-## Authentication
+| File                      | What to change                                                    |
+| ------------------------- | ----------------------------------------------------------------- |
+| `src/routes/`             | Start pages and the two catch-all routes for Better Auth and oRPC |
+| `src/start.ts`            | The global sign-in policy and request middleware                  |
+| `src/server/auth.ts`      | Better Auth configuration, typed `User` and `requireUser`         |
+| `src/server/api.ts`       | oRPC procedures and their Zod contracts                           |
+| `src/server/functions.ts` | Start server functions that call those same procedures            |
+| `src/db/schema.ts`        | Drizzle table definitions                                         |
 
-The public `/auth` gateway handles sign-in, the OAuth callback, and sign-out. The app-wide `Depends(require_auth)` protects API routes and the built frontend. Use `Annotated[User, Depends(get_user)]` to inject the verified user. FastAPI issues the signed session JWT in an HttpOnly cookie with a one-hour lifetime. Signing out clears the browser cookies.
+Add a procedure with `.route()`, `.input()`, `.output()`, and `.handler()`. oRPC validates inputs and outputs at runtime and derives the handler types and OpenAPI spec from the Zod schemas. Procedures get the authenticated user through `context.user`. The Start server functions bridge that same request context into oRPC with `requireUser(context.user)`.
 
-Add custom claims to `User` in `backend/auth.py` and populate them in `github_user` in `backend/oauth.py`. The JWT includes the validated user model. User IDs come from GitHub's stable account ID, and sign-in requires a verified primary GitHub email.
+Sign in and open `/api/docs` for Swagger UI or `/api/openapi.json` for the live spec. Use `make openapi > openapi.json` to export it without a server or database. The example profile form calls a Start server function, and `PATCH /api/profile` exposes the same operation through HTTP.
 
-Run `make generate` after changing an API route. It exports FastAPI's OpenAPI schema and regenerates the Zod validators, inferred types, SDK, and React Query hooks under `web/src/generated`. Run `make check` for the OAuth session integration test and Ruff, Pyright, Biome, and TypeScript checks. TypeScript 7.1 beta checks the app, and Hey API uses the TypeScript 6 API to generate its client.
+Better Auth stores the session in a signed HttpOnly JWT cookie. The database stores application data, keyed by the stable `githubId` claim. To add a claim, update `user.additionalFields`, `mapProfileToUser`, and `userSchema` in `src/server/auth.ts`.
 
-## Modal
+## Database and production
 
-Create a Modal secret named `of-electric-sheep` in each environment with `AUTH_SECRET`, `DATABASE_URL`, `AUTH_ORIGINS` (a JSON array of exact HTTPS origins), and the two GitHub OAuth values. Use a database reachable from Modal and register `<app-origin>/auth/callback/github` with GitHub. For `modal serve`, use the development URL printed by Modal as the origin.
+- `make db-generate` generates and snapshots a migration after a schema change.
+- `make db-migrate` applies migrations to `DATABASE_URL`.
+- `make db-studio` opens Drizzle Studio.
+- `make check` runs Biome and strict TypeScript.
 
-- `make modal-backend` serves FastAPI on Modal.
-- `make modal-full` builds Vite locally and serves the full stack on Modal.
-- `make deploy` deploys the full stack. Use the target Modal environment via `MODAL_ENVIRONMENT`.
+Build with `make build` and run `PORT=5173 make start` to try the Node production build locally. For deployment, serve `.output/server/index.mjs`, apply migrations to the target database, and set `APP_URL` to the public HTTPS origin. Supply `DATABASE_URL`, `AUTH_SECRET`, and the GitHub credentials via your host's environment, and register `<APP_URL>/api/auth/callback/github` with GitHub.
+
+### Vercel
+
+Import the repo as a TanStack Start project and select Node.js 24.x. The existing Nitro plugin produces the Vercel Functions and static assets. Use the default build settings and set `ENABLE_EXPERIMENTAL_COREPACK=1` so Vercel uses the pnpm version pinned in `package.json`. [Vercel's TanStack Start guide](https://vercel.com/docs/frameworks/full-stack/tanstack-start) · [Corepack setup](https://vercel.com/docs/builds/configure-a-build#corepack)
+
+Set `APP_URL`, `AUTH_SECRET`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, and a hosted PostgreSQL `DATABASE_URL` in the project environment. Use a pooled connection string if your provider supplies one. Apply migrations separately with `make db-migrate` targeting that database. For preview sign-in, use a stable preview domain and register its exact `/api/auth/callback/github` URL too.

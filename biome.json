@@ -7,11 +7,24 @@
       "!**/build",
       "!**/scratch",
       "!**/.local",
-      "!**/.venv"
+      "!**/.venv",
+      "!**/routeTree.gen.ts",
+      "!**/drizzle/meta",
+      "!**/.output",
+      "!**/.vercel",
+      "!**/.tanstack",
+      "!**/.nitro",
+      "!**/dist",
+      "!**/__pycache__",
+      "!**/.ruff_cache"
     ]
   },
-  "formatter": { "indentStyle": "space" },
-  "assist": { "enabled": true },
+  "formatter": {
+    "indentStyle": "space"
+  },
+  "assist": {
+    "enabled": true
+  },
   "linter": {
     "rules": {
       "preset": "recommended",
@@ -30,7 +43,11 @@
         "noUnsafeReturn": "error"
       }
     },
-    "domains": { "react": "recommended" }
+    "domains": {
+      "react": "recommended"
+    }
   },
-  "javascript": { "globals": ["process"] }
+  "javascript": {
+    "globals": ["process"]
+  }
 }
