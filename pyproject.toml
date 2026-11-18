@@ -1,0 +1,31 @@
+[project]
+name = "of-electric-sheep"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.139",
+    "httpx",
+    "psycopg[binary]",
+    "pydantic-settings",
+    "pyjwt",
+    "uvicorn[standard]",
+]
+
+[project.optional-dependencies]
+modal = ["modal"]
+
+[dependency-groups]
+dev = ["pyright", "ruff"]
+
+[tool.uv]
+package = false
+
+[tool.pyright]
+typeCheckingMode = "strict"
+include = ["backend", "modal_app.py", "tests"]
+venvPath = "."
+venv = ".venv"
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = ["D", "COM812", "CPY", "EM", "TRY003"]
