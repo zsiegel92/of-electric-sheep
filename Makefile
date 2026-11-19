@@ -4,7 +4,7 @@ install:
 	pnpm install --frozen-lockfile
 
 env:
-	sh scripts/env.sh
+	node scripts/env.ts
 
 db: env
 	sh scripts/postgres.sh start

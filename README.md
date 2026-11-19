@@ -4,7 +4,7 @@ One TanStack Start app with Better Auth, oRPC, and Drizzle/PostgreSQL.
 
 ## Run locally
 
-Use Node 24+, pnpm, OpenSSL, and the PostgreSQL command-line tools.
+Use Node 24+, pnpm, and the PostgreSQL command-line tools.
 
 ```sh
 make install
@@ -33,6 +33,15 @@ Sign in and open `/api/docs` for Swagger UI or `/api/openapi.json` for the live 
 For oRPC routes, add an entry to `afterResponseCallbacks` alongside the procedure definitions in `src/server/api.ts`. Try `GET /api/viewer` in Swagger on the local Node server for an example. For a native Start route, call `afterResponse(request, callback)` before returning. The callback runs when Nitro's Node transport finishes sending the response. [Node HTTP response events](https://nodejs.org/api/http.html#event-finish)
 
 Better Auth stores the session in a signed HttpOnly JWT cookie. The database schema can use the stable `githubId` claim to key application data. To add a claim, update `userSchema` and populate it in `mapProfileToUser` in `src/server/auth.ts`. The Zod schema supplies Better Auth’s additional field definitions and validators.
+
+## System One decisions
+
+Set `TYPESAFE_API_KEY` in `.env` or the deployment environment. `TYPESAFE_BASE_URL` defaults to `https://api.typesafe.ai`. The server adds the TypeSafe bearer credential after the app authenticates the caller.
+
+- `GET /api/system-one/models` lists available Jev models and aliases.
+- `POST /api/system-one` evaluates named yes/no, choice, score, or bounding-box questions. It accepts JSON with inline images or multipart with a JSON `request` part and named image files.
+
+The **System One · TypeSafe** section in `/api/docs` shows request examples and the two optional capability headers. The router, Zod schemas, and upstream client live in `src/server/system-one/`. [TypeSafe API reference](https://api.typesafe.ai/docs)
 
 ## Database and production
 
