@@ -1,7 +1,66 @@
 import "@tanstack/react-start/server-only";
 import { ORPCError } from "@orpc/server";
 import { z } from "zod";
-import { badRequest, validationError } from "./schemas";
+import {
+  badRequest,
+  type decisionInput,
+  modelList,
+  multipartRequest,
+  systemOneResponse,
+  type upload,
+  validationError,
+} from "./schemas";
+
+async function parseMultipart(
+  input: z.output<typeof upload>,
+): Promise<FormData> {
+  const { request, ...files } = input;
+  const json = typeof request === "string" ? request : await request.text();
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    throw new ORPCError("BAD_REQUEST", {
+      data: { detail: "The request part must contain JSON." },
+    });
+  }
+  const result = multipartRequest.safeParse(parsed);
+  if (!result.success) {
+    throw new ORPCError("BAD_REQUEST", {
+      data: {
+        detail: "The request part must match the System One request schema.",
+      },
+    });
+  }
+
+  const parts = new Set(Object.keys(files));
+  for (const asset of Object.values(result.data.assets ?? {})) {
+    if ("part" in asset && !parts.delete(asset.part)) {
+      throw new ORPCError("BAD_REQUEST", {
+        data: {
+          detail:
+            "Each image asset part must reference a unique uploaded file.",
+        },
+      });
+    }
+  }
+  if (parts.size > 0) {
+    throw new ORPCError("BAD_REQUEST", {
+      data: {
+        detail: "Every uploaded file must be referenced by an image asset.",
+      },
+    });
+  }
+
+  const form = new FormData();
+  form.set(
+    "request",
+    new Blob([JSON.stringify(result.data)], { type: "application/json" }),
+    "request.json",
+  );
+  for (const [name, file] of Object.entries(files)) form.set(name, file);
+  return form;
+}
 
 const typesafeEnv = z.object({
   TYPESAFE_BASE_URL: z
@@ -18,7 +77,7 @@ export const typesafeErrors = {
   SERVICE_UNAVAILABLE: { message: "TypeSafe credentials are not configured" },
 };
 
-export async function typesafeRequest<T extends z.ZodType>(
+async function typesafeRequest<T extends z.ZodType>(
   path: "v1/models" | "v1/systemone",
   schema: T,
   options: RequestInit,
@@ -75,5 +134,28 @@ export async function typesafeRequest<T extends z.ZodType>(
   }
   throw new ORPCError("BAD_GATEWAY", {
     message: typesafeErrors.BAD_GATEWAY.message,
+  });
+}
+
+export function listModels() {
+  return typesafeRequest("v1/models", modelList, { method: "GET" });
+}
+
+export async function runDecision({
+  headers: options,
+  body: input,
+}: z.output<typeof decisionInput>) {
+  const headers = new Headers();
+  for (const [name, value] of Object.entries(options)) {
+    if (value) headers.set(name, value);
+  }
+
+  const body =
+    "request" in input ? await parseMultipart(input) : JSON.stringify(input);
+  if (typeof body === "string") headers.set("Content-Type", "application/json");
+  return typesafeRequest("v1/systemone", systemOneResponse, {
+    method: "POST",
+    headers,
+    body,
   });
 }

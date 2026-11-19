@@ -1,10 +1,7 @@
 import type { z } from "zod";
 import { apiKeyHeader, apiKeySecret } from "@/server/api-key-schemas";
-import { systemOneRoutes } from "@/server/system-one/routes";
-import {
-  systemOneRequest,
-  systemOneResponse,
-} from "@/server/system-one/schemas";
+import { systemOneRoutes } from "./routes";
+import { systemOneRequest, systemOneResponse } from "./schemas";
 
 export type SystemOneInput = z.input<typeof systemOneRequest>;
 

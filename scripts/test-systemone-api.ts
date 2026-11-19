@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
-import { decide, type SystemOneInput } from "../src/lib/system-one/client";
+import {
+  decide,
+  type SystemOneInput,
+} from "../src/lib/system-one/rest-api-client";
 import { ensureTestUser } from "./ensure-test-user";
 
 const { APP_URL } = process.env;

@@ -1,5 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
-import { decide, type SystemOneInput } from "./client";
+import { decide, type SystemOneInput } from "./rest-api-client";
 
 export function useDecision(apiKey: string) {
   return useMutation({

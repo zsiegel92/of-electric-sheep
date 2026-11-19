@@ -4,7 +4,7 @@ import type {
   Experimental_DecisionQuestion,
 } from "ai";
 import { z } from "zod";
-import type { RouteRequestBody } from "../route-group";
+import type { RouteRequestBody } from "@/server/route-group";
 
 const content = z.union([
   z.string(),
@@ -275,6 +275,24 @@ JSON_SCHEMA_REGISTRY.add(requestPart, {
 });
 JSON_SCHEMA_REGISTRY.add(imagePart, { type: "string", format: "binary" });
 export const upload = z.object({ request: requestPart }).catchall(imagePart);
+
+const imagesHeader = "typesafe-danger-zone-images";
+const longContextHeader = "typesafe-danger-zone-long-context";
+const headersSchema = z.object({
+  [imagesHeader]: z
+    .literal("true")
+    .optional()
+    .describe("Enable image assets and box questions."),
+  [longContextHeader]: z
+    .literal("true")
+    .optional()
+    .describe("Enable long context."),
+});
+
+export const decisionInput = z.object({
+  headers: headersSchema,
+  body: z.union([systemOneRequest, upload]),
+});
 
 export const decisionRequestBody = {
   required: true,

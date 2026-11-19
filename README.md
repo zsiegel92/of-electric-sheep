@@ -48,7 +48,7 @@ Sign in and use **API keys** in the navbar to create, list, or revoke keys. Use 
 
 Send an OfElectricSheep key in the `X-API-Key` header to call System One without a browser session. The System One procedure middleware resolves the key's owner before sending the request to TypeSafe. Configure the upstream `TYPESAFE_BASE_URL` and `TYPESAFE_API_KEY` on the server. In Swagger, use **Authorize** to set the OfElectricSheep key.
 
-Server functions can call `decideWithAiSdk({ model, state, questions })` from `src/server/system-one/ai-sdk.ts` with a configured AI SDK decision model. The adapter maps SDK answers to the existing System One schema and uses TypeSafe metadata for choice and score confidence and score rubrics.
+Server functions can call `decideWithAiSdk({ model, state, questions })` from `src/lib/system-one/ai-sdk.ts` with a configured AI SDK decision model. The adapter maps SDK answers to the existing System One schema and uses TypeSafe metadata for choice and score confidence and score rubrics.
 
 - `GET /api/system-one/models` lists available Jev models and aliases.
 - `POST /api/system-one` evaluates named yes/no, choice, score, or bounding-box questions. It accepts JSON with inline images or multipart with a JSON `request` part and named image files.

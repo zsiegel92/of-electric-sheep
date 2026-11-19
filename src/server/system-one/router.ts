@@ -1,82 +1,24 @@
-import { type AnyProcedure, ORPCError, os } from "@orpc/server";
-import { z } from "zod";
-import { findApiKeyUser } from "../api-keys";
-import { routeGroup } from "../route-group";
-import { typesafeErrors, typesafeRequest } from "./client";
-import { systemOneRoutes } from "./routes";
+import "@tanstack/react-start/server-only";
+import { type AnyProcedure, os } from "@orpc/server";
+import { systemOneRoutes } from "@/lib/system-one/routes";
 import {
+  decisionInput,
   decisionRequestBody,
   modelList,
-  multipartRequest,
-  systemOneRequest,
   systemOneResponse,
-  upload,
-} from "./schemas";
+} from "@/lib/system-one/schemas";
+import {
+  listModels,
+  runDecision,
+  typesafeErrors,
+} from "@/lib/system-one/system-one-api-client";
+import { findApiKeyUser } from "../api-keys";
+import type { User } from "../auth";
+import { routeGroup } from "../route-group";
 
 export const systemOneTag = "System One · TypeSafe";
-const imagesHeader = "typesafe-danger-zone-images";
-const longContextHeader = "typesafe-danger-zone-long-context";
-const headersSchema = z.object({
-  [imagesHeader]: z
-    .literal("true")
-    .optional()
-    .describe("Enable image assets and box questions."),
-  [longContextHeader]: z
-    .literal("true")
-    .optional()
-    .describe("Enable long context."),
-});
 
-async function parseMultipart(input: z.output<typeof upload>) {
-  const { request, ...files } = input;
-  const json = typeof request === "string" ? request : await request.text();
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(json);
-  } catch {
-    throw new ORPCError("BAD_REQUEST", {
-      data: { detail: "The request part must contain JSON." },
-    });
-  }
-  const result = multipartRequest.safeParse(parsed);
-  if (!result.success) {
-    throw new ORPCError("BAD_REQUEST", {
-      data: {
-        detail: "The request part must match the System One request schema.",
-      },
-    });
-  }
-
-  const parts = new Set(Object.keys(files));
-  for (const asset of Object.values(result.data.assets ?? {})) {
-    if ("part" in asset && !parts.delete(asset.part)) {
-      throw new ORPCError("BAD_REQUEST", {
-        data: {
-          detail:
-            "Each image asset part must reference a unique uploaded file.",
-        },
-      });
-    }
-  }
-  if (parts.size > 0) {
-    throw new ORPCError("BAD_REQUEST", {
-      data: {
-        detail: "Every uploaded file must be referenced by an image asset.",
-      },
-    });
-  }
-
-  const form = new FormData();
-  form.set(
-    "request",
-    new Blob([JSON.stringify(result.data)], { type: "application/json" }),
-    "request.json",
-  );
-  for (const [name, file] of Object.entries(files)) form.set(name, file);
-  return form;
-}
-
-const apiKeyProcedure = os
+const apiKeyAuth = os
   .$context<{ headers: Headers }>()
   .errors({
     ...typesafeErrors,
@@ -88,12 +30,12 @@ const apiKeyProcedure = os
     return next({ context: { user } });
   });
 
-const route = routeGroup(apiKeyProcedure, {
+const route = routeGroup(os.$context<{ user: User }>(), {
   tag: systemOneTag,
   security: [{ ApiKey: [] }],
 });
 
-export const systemOneRouter = {
+export const systemOneRouter = apiKeyAuth.router({
   models: route({
     ...systemOneRoutes.models,
     summary: "List models",
@@ -101,7 +43,7 @@ export const systemOneRouter = {
       "List Jev models and aliases available to the configured TypeSafe account.",
   })
     .output(modelList)
-    .handler(() => typesafeRequest("v1/models", modelList, { method: "GET" })),
+    .handler(listModels),
 
   decide: route({
     ...systemOneRoutes.decide,
@@ -111,28 +53,7 @@ export const systemOneRouter = {
     inputStructure: "detailed",
     requestBody: decisionRequestBody,
   })
-    .input(
-      z.object({
-        headers: headersSchema,
-        body: z.union([systemOneRequest, upload]),
-      }),
-    )
+    .input(decisionInput)
     .output(systemOneResponse)
-    .handler(async ({ input }) => {
-      const headers = new Headers();
-      for (const [name, value] of Object.entries(input.headers)) {
-        if (value) headers.set(name, value);
-      }
-      const body =
-        "request" in input.body
-          ? await parseMultipart(input.body)
-          : JSON.stringify(input.body);
-      if (typeof body === "string")
-        headers.set("Content-Type", "application/json");
-      return typesafeRequest("v1/systemone", systemOneResponse, {
-        method: "POST",
-        headers,
-        body,
-      });
-    }),
-} satisfies Record<keyof typeof systemOneRoutes, AnyProcedure>;
+    .handler(({ input }) => runDecision(input)),
+} satisfies Record<keyof typeof systemOneRoutes, AnyProcedure>);

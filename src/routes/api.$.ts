@@ -4,10 +4,6 @@ import { OpenAPIReferencePlugin } from "@orpc/openapi/plugins";
 import type { AnyRouter } from "@orpc/server";
 import { ZodToJsonSchemaConverter } from "@orpc/zod/zod4";
 import { createFileRoute } from "@tanstack/react-router";
-import { apiKeyHeader } from "../server/api-key-schemas";
-import { apiKeysTag, keyManagementRouter } from "../server/api-keys";
-import type { User } from "../server/auth";
-import { systemOneRouter, systemOneTag } from "../server/system-one/router";
 import {
   answer,
   modelList,
@@ -16,7 +12,11 @@ import {
   systemOneRequest,
   systemOneResponse,
   upload,
-} from "../server/system-one/schemas";
+} from "../lib/system-one/schemas";
+import { apiKeyHeader } from "../server/api-key-schemas";
+import { apiKeysTag, keyManagementRouter } from "../server/api-keys";
+import type { User } from "../server/auth";
+import { systemOneRouter, systemOneTag } from "../server/system-one/router";
 
 export const apiRouters = {
   systemOne: systemOneRouter,
