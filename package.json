@@ -7,7 +7,7 @@
     "node": ">=24"
   },
   "scripts": {
-    "dev": "concurrently --kill-others --names web,jobs \"pnpm dev:web\" \"pnpm dev:jobs\"",
+    "dev": "concurrently --kill-others --names web,inngest \"pnpm dev:web\" \"pnpm dev:inngest\"",
     "build": "vite build",
     "start": "node --env-file-if-exists=.env .output/server/index.mjs",
     "lint": "biome ci .",
@@ -17,7 +17,7 @@
     "db:studio": "drizzle-kit studio",
     "openapi": "tsx scripts/openapi.ts",
     "dev:web": "INNGEST_DEV=1 node --env-file-if-exists=.env node_modules/vite/bin/vite.js",
-    "dev:jobs": "inngest dev --host 127.0.0.1 --no-discovery -u http://localhost:5173/api/inngest"
+    "dev:inngest": "inngest dev --host 127.0.0.1 --no-discovery -u http://localhost:5173/api/inngest"
   },
   "dependencies": {
     "@orpc/openapi": "1.16.3",

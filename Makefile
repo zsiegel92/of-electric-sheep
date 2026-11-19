@@ -7,13 +7,12 @@ env:
 	node scripts/env.ts
 
 db: env
-	sh scripts/postgres.sh start
+	sh scripts/db/init-local-postgres.sh
 
 db-stop:
-	sh scripts/postgres.sh stop
+	pg_ctl -D .local/postgres -m fast -w stop
 
 dev: db
-	$(MAKE) db-migrate
 	pnpm dev
 
 build:

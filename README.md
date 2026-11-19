@@ -11,7 +11,7 @@ make install
 make dev
 ```
 
-Open [localhost:5173](http://localhost:5173). `make dev` creates `.env` if needed, starts local PostgreSQL on port 54873, applies migrations, and runs Vite and the Inngest dev server together. Ctrl-C stops both. Use `make db-stop` to stop PostgreSQL.
+Open [localhost:5173](http://localhost:5173). `make dev` creates `.env` if needed, starts local PostgreSQL on port 54873, and runs Vite and the Inngest dev server together. Apply migrations explicitly with `make db-migrate`. Ctrl-C stops Vite and Inngest. Use `make db-stop` to stop PostgreSQL.
 
 Set `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` in `.env`, then restart the app. Register **`http://localhost:5173/api/auth/callback/github`** as a redirect URI on your GitHub OAuth App. The callback path changed in the migration to TanStack Start. `APP_URL` defaults to `http://localhost:5173`.
 
