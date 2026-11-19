@@ -3,20 +3,27 @@ import {
   createMiddleware,
   createStart,
 } from "@tanstack/react-start";
-import { getUser } from "./server/auth";
-import { isSystemOneRequest } from "./server/system-one/paths";
+import { getUser, type User } from "./server/auth";
+import { isRequestThatRequiresApiKey } from "./server/system-one/routes";
 
-const authenticate = createMiddleware().server(
+const authenticate = createMiddleware().server<{ user: User | null }>(
   async ({ request, handlerType, next }) => {
-    const url = new URL(request.url);
+    const pathname = new URL(request.url).pathname;
     const isPublic =
-      url.pathname === "/sign-in" ||
-      url.pathname === "/api/inngest" ||
-      url.pathname.startsWith("/api/auth/");
-    const usesApiKey = isSystemOneRequest(url.pathname);
-    const user = isPublic || usesApiKey ? null : await getUser(request.headers);
-    if (!isPublic && !usesApiKey && !user) {
-      if (url.pathname.startsWith("/api/") || handlerType === "serverFn") {
+      pathname === "/sign-in" ||
+      pathname === "/api/inngest" ||
+      pathname.startsWith("/api/auth/");
+    if (isPublic) return next({ context: { user: null } });
+
+    if (isRequestThatRequiresApiKey(pathname)) {
+      const result = await next({ context: { user: null } });
+      result.response.headers.set("Cache-Control", "private, no-store");
+      return result;
+    }
+
+    const user = await getUser(request.headers);
+    if (!user) {
+      if (pathname.startsWith("/api/") || handlerType === "serverFn") {
         return Response.json(
           { message: "Sign in required" },
           {
@@ -30,10 +37,8 @@ const authenticate = createMiddleware().server(
         headers: { Location: "/sign-in", "Cache-Control": "no-store" },
       });
     }
-
     const result = await next({ context: { user } });
-    if (user || usesApiKey)
-      result.response.headers.set("Cache-Control", "private, no-store");
+    result.response.headers.set("Cache-Control", "private, no-store");
     return result;
   },
 );
@@ -48,7 +53,7 @@ export const startInstance = createStart(() => ({
           (!["GET", "HEAD", "OPTIONS"].includes(request.method) &&
             pathname !== "/api/inngest" &&
             !pathname.startsWith("/api/auth/") &&
-            !isSystemOneRequest(pathname))
+            !isRequestThatRequiresApiKey(pathname))
         );
       },
     }),

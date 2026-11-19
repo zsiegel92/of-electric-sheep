@@ -1,5 +1,8 @@
 import { z } from "zod";
 
+export const apiKeyHeader = "X-API-Key";
+export const apiKeySecret = z.string().regex(/^oes_[\w-]{43}$/);
+
 const id = z.uuid();
 const name = z.string().trim().min(1).max(80);
 

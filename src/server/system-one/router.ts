@@ -1,9 +1,9 @@
-import { ORPCError, os } from "@orpc/server";
+import { type AnyProcedure, ORPCError, os } from "@orpc/server";
 import { z } from "zod";
 import { findApiKeyUser } from "../api-keys";
 import { routeGroup } from "../route-group";
 import { typesafeErrors, typesafeRequest } from "./client";
-import { systemOneModelsPath, systemOnePath } from "./paths";
+import { systemOneRoutes } from "./routes";
 import {
   decisionRequestBody,
   modelList,
@@ -93,10 +93,9 @@ const route = routeGroup(apiKeyProcedure, {
   security: [{ ApiKey: [] }],
 });
 
-export const systemOne = {
+export const systemOneRouter = {
   models: route({
-    method: "GET",
-    path: systemOneModelsPath,
+    ...systemOneRoutes.models,
     summary: "List models",
     description:
       "List Jev models and aliases available to the configured TypeSafe account.",
@@ -105,8 +104,7 @@ export const systemOne = {
     .handler(() => typesafeRequest("v1/models", modelList, { method: "GET" })),
 
   decide: route({
-    method: "POST",
-    path: systemOnePath,
+    ...systemOneRoutes.decide,
     summary: "Evaluate content with System One",
     description:
       "Ask named yes/no, choice, score, or box questions about shared content. Mix question types in one request. Requires an API key created in OfElectricSheep.",
@@ -137,4 +135,4 @@ export const systemOne = {
         body,
       });
     }),
-};
+} satisfies Record<keyof typeof systemOneRoutes, AnyProcedure>;

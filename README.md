@@ -32,13 +32,13 @@ For deployment, configure `INNGEST_EVENT_KEY` and `INNGEST_SIGNING_KEY` and sync
 | `src/routes/`             | Start pages and the two catch-all routes for Better Auth and oRPC |
 | `src/start.ts`            | The global sign-in policy and request middleware                  |
 | `src/server/auth.ts`      | Better Auth configuration, typed `User` and `requireUser`         |
-| `src/server/api.ts`       | oRPC router, Swagger setup, and spec export                       |
+| `src/routes/api.$.ts`     | oRPC router registry and Swagger setup                            |
 | `src/server/functions.ts` | Start server functions for identity and API-key management        |
 | `src/lib/db/schema.ts`    | Drizzle table definitions                                         |
 
 Add a procedure with `.route()`, `.input()`, `.output()`, and `.handler()`. oRPC validates inputs and outputs at runtime and derives the handler types and OpenAPI spec from the Zod schemas. Procedures get the authenticated user through `context.user`. The Start server functions for API keys pass along that same request context.
 
-Sign in and open `/api/docs` for Swagger UI or `/api/openapi.json` for the live spec. Use `make openapi > openapi.json` to export it without a server or database. The root loader calls `getCurrentUser` to read the signed-in user from Start’s request context.
+Sign in and open `/api/docs` for Swagger UI or `/api/openapi.json` for the live spec. The root loader calls `getCurrentUser` to read the signed-in user from Start’s request context.
 
 Better Auth stores the session in a signed HttpOnly JWT cookie. The database schema can use the stable `githubId` claim to key application data. To add a claim, update `userSchema` and populate it in `mapProfileToUser` in `src/server/auth.ts`. The Zod schema supplies Better Auth’s additional field definitions and validators.
 

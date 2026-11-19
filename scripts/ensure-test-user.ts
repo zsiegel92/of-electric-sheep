@@ -1,10 +1,7 @@
 import { eq } from "drizzle-orm";
 import { apiKeys } from "../src/lib/db/schema";
-import {
-  apiKeySecret,
-  apiKeyStorageFields,
-  saveUser,
-} from "../src/server/api-keys";
+import { apiKeySecret } from "../src/server/api-key-schemas";
+import { apiKeyStorageFields, saveUser } from "../src/server/api-keys";
 import type { User } from "../src/server/auth";
 import { withTestScriptDb } from "./test-db";
 

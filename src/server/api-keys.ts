@@ -7,16 +7,15 @@ import { getDb } from "@/lib/db/db";
 import { apiKeys, users } from "@/lib/db/schema";
 import {
   apiKey,
+  apiKeyHeader,
   apiKeyId,
   apiKeyName,
+  apiKeySecret,
   createdApiKey,
   deletedApiKey,
 } from "./api-key-schemas";
 import { type User, userSchema } from "./auth";
 import { routeGroup } from "./route-group";
-
-export const apiKeyHeader = "X-API-Key";
-export const apiKeySecret = z.string().regex(/^oes_[\w-]{43}$/);
 
 function hashKey(secret: string) {
   return createHash("sha256").update(secret).digest("hex");
@@ -84,7 +83,7 @@ export const apiKeysTag = "API keys";
 
 const route = routeGroup(sessionProcedure, { tag: apiKeysTag });
 
-export const keyManagement = {
+export const keyManagementRouter = {
   list: route({
     method: "GET",
     path: "/api-keys",

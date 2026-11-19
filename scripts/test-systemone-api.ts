@@ -1,10 +1,5 @@
 import assert from "node:assert/strict";
-import { apiKeyHeader } from "../src/server/api-keys";
-import { systemOnePath } from "../src/server/system-one/paths";
-import {
-  systemOneRequest,
-  systemOneResponse,
-} from "../src/server/system-one/schemas";
+import { decide, type SystemOneInput } from "../src/lib/system-one/client";
 import { ensureTestUser } from "./ensure-test-user";
 
 const { APP_URL } = process.env;
@@ -17,7 +12,7 @@ if (
 }
 
 const { secret } = await ensureTestUser();
-const input = systemOneRequest.parse({
+const input = {
   model: "jev-latest",
   state: "The customer asked for a refund because the parcel arrived broken.",
   questions: {
@@ -36,22 +31,12 @@ const input = systemOneRequest.parse({
       criteria: ["Low", "Medium", "High"],
     },
   },
-});
+} satisfies SystemOneInput;
 
-const response = await fetch(new URL(`/api${systemOnePath}`, appUrl), {
-  method: "POST",
-  headers: { [apiKeyHeader]: secret, "Content-Type": "application/json" },
-  body: JSON.stringify(input),
-  redirect: "error",
-  signal: AbortSignal.timeout(65_000),
+const { answers, model } = await decide(input, {
+  apiKey: secret,
+  baseUrl: appUrl,
 });
-if (!response.ok) {
-  throw new Error(
-    `System One returned HTTP ${response.status}: ${await response.text()}`,
-  );
-}
-
-const { answers, model } = systemOneResponse.parse(await response.json());
 for (const [name, question] of Object.entries(input.questions)) {
   assert.equal(
     answers[name]?.type,

@@ -1,4 +1,4 @@
-.PHONY: install env db db-stop dev build start check openapi db-generate db-migrate db-studio
+.PHONY: install env db db-stop dev build start check db-generate db-migrate db-studio
 
 install:
 	pnpm install --frozen-lockfile
@@ -24,9 +24,6 @@ start:
 check:
 	pnpm lint
 	pnpm typecheck
-
-openapi:
-	@pnpm --silent openapi
 
 db-generate:
 	pnpm db:generate
