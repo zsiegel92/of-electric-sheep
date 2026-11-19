@@ -4,14 +4,16 @@ import {
   createStart,
 } from "@tanstack/react-start";
 import { getUser } from "./server/auth";
+import { isSystemOneRequest } from "./server/system-one/paths";
 
 const authenticate = createMiddleware().server(
   async ({ request, handlerType, next }) => {
     const url = new URL(request.url);
     const isPublic =
       url.pathname === "/sign-in" || url.pathname.startsWith("/api/auth/");
-    const user = isPublic ? null : await getUser(request.headers);
-    if (!isPublic && !user) {
+    const usesApiKey = isSystemOneRequest(url.pathname);
+    const user = isPublic || usesApiKey ? null : await getUser(request.headers);
+    if (!isPublic && !usesApiKey && !user) {
       if (url.pathname.startsWith("/api/") || handlerType === "serverFn") {
         return Response.json(
           { message: "Sign in required" },
@@ -28,7 +30,8 @@ const authenticate = createMiddleware().server(
     }
 
     const result = await next({ context: { user } });
-    if (user) result.response.headers.set("Cache-Control", "private, no-store");
+    if (user || usesApiKey)
+      result.response.headers.set("Cache-Control", "private, no-store");
     return result;
   },
 );
@@ -36,10 +39,15 @@ const authenticate = createMiddleware().server(
 export const startInstance = createStart(() => ({
   requestMiddleware: [
     createCsrfMiddleware({
-      filter: ({ request, handlerType }) =>
-        handlerType === "serverFn" ||
-        (!["GET", "HEAD", "OPTIONS"].includes(request.method) &&
-          !new URL(request.url).pathname.startsWith("/api/auth/")),
+      filter: ({ request, handlerType }) => {
+        const { pathname } = new URL(request.url);
+        return (
+          handlerType === "serverFn" ||
+          (!["GET", "HEAD", "OPTIONS"].includes(request.method) &&
+            !pathname.startsWith("/api/auth/") &&
+            !isSystemOneRequest(pathname))
+        );
+      },
     }),
     authenticate,
   ],

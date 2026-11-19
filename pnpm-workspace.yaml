@@ -16,3 +16,5 @@ minimumReleaseAgeExclude:
   - "@orpc/standard-server-peer@1.16.3"
   - "@orpc/standard-server@1.16.3"
   - "@orpc/zod@1.16.3"
+  - "@ai-sdk/gateway@4.0.150"
+  - ai@7.0.177

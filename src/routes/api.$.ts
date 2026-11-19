@@ -1,8 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { afterResponse } from "../server/after-response";
-import { afterResponseCallbacks } from "../server/api";
-import { requireUser } from "../server/auth";
-import { openApi } from "../server/openapi";
+import { afterResponseCallbacks, openApi } from "../server/api";
 
 const callbacksByProcedure = new Map(Object.entries(afterResponseCallbacks));
 
@@ -14,7 +12,8 @@ export const Route = createFileRoute("/api/$")({
         const { response } = await openApi.handle(request, {
           prefix: "/api",
           context: {
-            user: requireUser(context.user),
+            user: context.user,
+            headers: request.headers,
             onProcedureSuccess: (name) => {
               matched.procedure = name;
             },

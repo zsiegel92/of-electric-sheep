@@ -15,6 +15,9 @@ const probabilities = z
   .record(named, probability)
   .describe("Probabilities keyed by option or rubric level.");
 const confidence = probability.describe("Confidence from 0 to 1.");
+export const scoreLegend = z
+  .record(named, content)
+  .describe("Rubric descriptions indexed by level.");
 
 function namedEntries<T extends z.ZodType>(
   value: T,
@@ -101,9 +104,7 @@ export const answer = z.discriminatedUnion("type", [
     type: z.literal("score"),
     score: z.number().describe("Probability-weighted expected rubric score."),
     confidence,
-    legend: z
-      .record(named, content)
-      .describe("Rubric descriptions indexed by level."),
+    legend: scoreLegend,
     probabilities,
   }),
   z.object({ type: z.literal("box"), box, confidence: confidence.nullable() }),
@@ -171,7 +172,6 @@ export const modelList = z.object({
 export const badRequest = z.object({
   detail: z.union([z.string(), z.record(z.string(), z.unknown())]),
 });
-
 export const validationError = z.object({
   detail: z.array(
     z.object({

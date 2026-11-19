@@ -1,7 +1,8 @@
 import { ORPCError, os } from "@orpc/server";
 import { z } from "zod";
-import type { User } from "../auth";
+import { findApiKeyUser } from "../api-keys";
 import { typesafeErrors, typesafeRequest } from "./client";
+import { systemOneModelsPath, systemOnePath } from "./paths";
 import {
   modelList,
   multipartRequest,
@@ -95,9 +96,7 @@ const examples = {
   { summary: string; value: z.input<typeof systemOneRequest> }
 >;
 
-async function encodeMultipart(
-  input: z.output<typeof upload>,
-): Promise<FormData> {
+async function parseMultipart(input: z.output<typeof upload>) {
   const { request, ...files } = input;
   const json = typeof request === "string" ? request : await request.text();
   let parsed: unknown;
@@ -140,22 +139,35 @@ async function encodeMultipart(
   form.set(
     "request",
     new Blob([JSON.stringify(result.data)], { type: "application/json" }),
+    "request.json",
   );
   for (const [name, file] of Object.entries(files)) form.set(name, file);
   return form;
 }
 
-const procedure = os.$context<{ user: User }>().errors(typesafeErrors);
+const security = [{ ApiKey: [] }];
+
+// Every System One operation authenticates the key and receives its owner.
+const procedure = os
+  .$context<{ headers: Headers }>()
+  .errors({
+    ...typesafeErrors,
+    UNAUTHORIZED: { message: "An active API key is required" },
+  })
+  .use(async ({ context, next }) =>
+    next({ context: { user: await findApiKeyUser(context.headers) } }),
+  );
 
 export const systemOne = {
   models: procedure
     .route({
       method: "GET",
-      path: "/system-one/models",
+      path: systemOneModelsPath,
+      spec: (operation) => ({ ...operation, security }),
       tags: [systemOneTag],
       summary: "List models",
       description:
-        "List Jev models and aliases available to this app’s TypeSafe account.",
+        "List Jev models and aliases available to the configured TypeSafe account.",
     })
     .output(modelList)
     .handler(() => typesafeRequest("v1/models", modelList, { method: "GET" })),
@@ -163,14 +175,15 @@ export const systemOne = {
   decide: procedure
     .route({
       method: "POST",
-      path: "/system-one",
+      path: systemOnePath,
       tags: [systemOneTag],
       summary: "Evaluate content with System One",
       description:
-        "Ask named yes/no, choice, score, or box questions about shared content. Mix question types in one request. The app supplies its TypeSafe credentials.",
+        "Ask named yes/no, choice, score, or box questions about shared content. Mix question types in one request. Requires an API key created in OfElectricSheep.",
       inputStructure: "detailed",
       spec: (operation) => ({
         ...operation,
+        security,
         requestBody: {
           required: true,
           content: {
@@ -217,18 +230,16 @@ export const systemOne = {
       for (const [name, value] of Object.entries(input.headers)) {
         if (value) headers.set(name, value);
       }
-      if ("request" in input.body) {
-        return typesafeRequest("v1/systemone", systemOneResponse, {
-          method: "POST",
-          headers,
-          body: await encodeMultipart(input.body),
-        });
-      }
-      headers.set("Content-Type", "application/json");
+      const body =
+        "request" in input.body
+          ? await parseMultipart(input.body)
+          : JSON.stringify(input.body);
+      if (typeof body === "string")
+        headers.set("Content-Type", "application/json");
       return typesafeRequest("v1/systemone", systemOneResponse, {
         method: "POST",
         headers,
-        body: JSON.stringify(input.body),
+        body,
       });
     }),
 };

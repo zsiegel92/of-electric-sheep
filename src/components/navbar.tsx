@@ -1,4 +1,4 @@
-import { useMatch } from "@tanstack/react-router";
+import { Link, useMatch } from "@tanstack/react-router";
 import { AuthControl } from "./auth-control";
 
 export function Navbar() {
@@ -16,6 +16,11 @@ export function Navbar() {
         <a href="/" className="text-lg font-semibold tracking-tight">
           OfElectricSheep
         </a>
+        {user && (
+          <Link to="/api-keys" className="text-sm hover:underline">
+            API keys
+          </Link>
+        )}
         <AuthControl user={user} />
       </nav>
     </header>

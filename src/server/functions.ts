@@ -1,8 +1,31 @@
 import { call } from "@orpc/server";
 import { createServerFn } from "@tanstack/react-start";
-import { api } from "./api";
+import { apiKeyId, apiKeyName, apiKeyUpdate } from "./api-key-schemas";
+import { keyManagement } from "./api-keys";
 import { requireUser } from "./auth";
 
-export const getViewer = createServerFn().handler(({ context }) =>
-  call(api.viewer, undefined, { context: { user: requireUser(context.user) } }),
+export const getCurrentUser = createServerFn().handler(({ context }) =>
+  requireUser(context.user),
 );
+
+export const listApiKeys = createServerFn().handler(({ context }) =>
+  call(keyManagement.list, undefined, { context: { user: context.user } }),
+);
+
+export const createApiKey = createServerFn({ method: "POST" })
+  .validator(apiKeyName)
+  .handler(({ data, context }) =>
+    call(keyManagement.create, data, { context: { user: context.user } }),
+  );
+
+export const renameApiKey = createServerFn({ method: "POST" })
+  .validator(apiKeyUpdate)
+  .handler(({ data, context }) =>
+    call(keyManagement.update, data, { context: { user: context.user } }),
+  );
+
+export const revokeApiKey = createServerFn({ method: "POST" })
+  .validator(apiKeyId)
+  .handler(({ data, context }) =>
+    call(keyManagement.delete, data, { context: { user: context.user } }),
+  );

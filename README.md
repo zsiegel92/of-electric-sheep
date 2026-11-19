@@ -22,13 +22,13 @@ Set `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` in `.env`, then restart the ap
 | `src/routes/`             | Start pages and the two catch-all routes for Better Auth and oRPC |
 | `src/start.ts`            | The global sign-in policy and request middleware                  |
 | `src/server/auth.ts`      | Better Auth configuration, typed `User` and `requireUser`         |
-| `src/server/api.ts`       | oRPC procedures and their Zod contracts                           |
-| `src/server/functions.ts` | Start server functions that call those same procedures            |
+| `src/server/api.ts`       | oRPC router, Swagger setup, and spec export                       |
+| `src/server/functions.ts` | Start server functions for identity and API-key management        |
 | `src/db/schema.ts`        | Drizzle table definitions                                         |
 
-Add a procedure with `.route()`, `.input()`, `.output()`, and `.handler()`. oRPC validates inputs and outputs at runtime and derives the handler types and OpenAPI spec from the Zod schemas. Procedures get the authenticated user through `context.user`. The Start server functions bridge that same request context into oRPC with `requireUser(context.user)`.
+Add a procedure with `.route()`, `.input()`, `.output()`, and `.handler()`. oRPC validates inputs and outputs at runtime and derives the handler types and OpenAPI spec from the Zod schemas. Procedures get the authenticated user through `context.user`. The Start server functions for API keys pass along that same request context.
 
-Sign in and open `/api/docs` for Swagger UI or `/api/openapi.json` for the live spec. Use `make openapi > openapi.json` to export it without a server or database. The navbar uses the root loader and its Start server function to fetch the same viewer data exposed by `GET /api/viewer`.
+Sign in and open `/api/docs` for Swagger UI or `/api/openapi.json` for the live spec. Use `make openapi > openapi.json` to export it without a server or database. The root loader calls `getCurrentUser` to read the signed-in user from Start’s request context.
 
 For oRPC routes, add an entry to `afterResponseCallbacks` alongside the procedure definitions in `src/server/api.ts`. Try `GET /api/viewer` in Swagger on the local Node server for an example. For a native Start route, call `afterResponse(request, callback)` before returning. The callback runs when Nitro's Node transport finishes sending the response. [Node HTTP response events](https://nodejs.org/api/http.html#event-finish)
 
@@ -36,7 +36,11 @@ Better Auth stores the session in a signed HttpOnly JWT cookie. The database sch
 
 ## System One decisions
 
-Set `TYPESAFE_API_KEY` in `.env` or the deployment environment. `TYPESAFE_BASE_URL` defaults to `https://api.typesafe.ai`. The server adds the TypeSafe bearer credential after the app authenticates the caller.
+Sign in and use **API keys** in the navbar to create, list, rename, or revoke keys. The full secret is shown at creation. PostgreSQL stores its hash and a display prefix. The **API keys** section in Swagger exposes the same CRUD operations at `/api/api-keys`. REST clients managing keys send their session cookies and, for writes, an `Origin` header matching the app origin.
+
+Send an OfElectricSheep key in the `X-API-Key` header to call System One without a browser session. The System One procedure middleware resolves the key's owner before sending the request to TypeSafe. Configure the upstream `TYPESAFE_BASE_URL` and `TYPESAFE_API_KEY` on the server. In Swagger, use **Authorize** to set the OfElectricSheep key.
+
+Server functions can call `decideWithAiSdk({ model, state, questions })` from `src/server/system-one/ai-sdk.ts` with a configured AI SDK decision model. The adapter maps SDK answers to the existing System One schema and uses TypeSafe metadata for choice and score confidence and score rubrics.
 
 - `GET /api/system-one/models` lists available Jev models and aliases.
 - `POST /api/system-one` evaluates named yes/no, choice, score, or bounding-box questions. It accepts JSON with inline images or multipart with a JSON `request` part and named image files.
