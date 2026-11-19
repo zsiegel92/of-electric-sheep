@@ -33,7 +33,7 @@ function Document({ children }: { children: ReactNode }) {
       </head>
       <body>
         <Navbar />
-        {children}
+        <div className="px-6 sm:px-10 lg:px-16">{children}</div>
         <Scripts />
       </body>
     </html>

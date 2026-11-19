@@ -5,7 +5,6 @@ const name = z.string().trim().min(1).max(80);
 
 export const apiKeyId = z.object({ id });
 export const apiKeyName = z.object({ name });
-export const apiKeyUpdate = apiKeyId.extend({ name });
 
 export const apiKey = z.object({
   id,

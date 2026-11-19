@@ -6,13 +6,9 @@ import {
 } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
+import { CopyButton } from "../components/copy-button";
 import { Button } from "../components/ui/button";
-import {
-  createApiKey,
-  listApiKeys,
-  renameApiKey,
-  revokeApiKey,
-} from "../server/functions";
+import { createApiKey, listApiKeys, revokeApiKey } from "../server/functions";
 
 const keysQuery = queryOptions({
   queryKey: ["api-keys"],
@@ -36,13 +32,12 @@ function ApiKeys() {
       return refresh();
     },
   });
-  const rename = useMutation({ mutationFn: renameApiKey, onSuccess: refresh });
   const revoke = useMutation({ mutationFn: revokeApiKey, onSuccess: refresh });
-  const failed = create.isError || rename.isError || revoke.isError;
+  const failed = create.isError || revoke.isError;
   const inputClass = "min-w-0 rounded-md border px-3 py-1.5 text-sm";
 
   return (
-    <main className="mx-auto max-w-3xl space-y-4 px-4 py-8">
+    <main className="space-y-4 py-8">
       <h1 className="text-2xl font-semibold">API keys</h1>
       <form
         className="flex items-center gap-2"
@@ -67,13 +62,16 @@ function ApiKeys() {
         <div className="space-y-2 rounded-md border p-3">
           <p className="text-sm">Copy this key now. It’s shown only once.</p>
           <code className="block select-all break-all text-sm">{secret}</code>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setSecret(undefined)}
-          >
-            Dismiss
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <CopyButton key={secret} value={secret} />
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setSecret(undefined)}
+            >
+              Dismiss
+            </Button>
+          </div>
         </div>
       )}
       {failed && (
@@ -86,44 +84,25 @@ function ApiKeys() {
       ) : (
         <ul className="divide-y rounded-md border">
           {keys.map((key) => (
-            <li key={key.id} className="space-y-2 p-3">
-              <code className="text-xs text-muted-foreground">
-                {key.prefix}…
-              </code>
-              <form
-                className="flex flex-wrap gap-2"
-                action={(form) => {
-                  const name = form.get("name");
-                  if (typeof name === "string")
-                    rename.mutate({ data: { id: key.id, name } });
-                }}
+            <li
+              key={key.id}
+              className="flex flex-wrap items-center justify-between gap-2 p-3"
+            >
+              <div>
+                <p className="text-sm font-medium break-all">{key.name}</p>
+                <code className="text-xs text-muted-foreground">
+                  {key.prefix}…
+                </code>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="destructive"
+                disabled={revoke.isPending}
+                onClick={() => revoke.mutate({ data: { id: key.id } })}
               >
-                <input
-                  name="name"
-                  aria-label={`Name for key ${key.prefix}`}
-                  defaultValue={key.name}
-                  required
-                  maxLength={80}
-                  className={inputClass}
-                />
-                <Button
-                  type="submit"
-                  size="sm"
-                  variant="outline"
-                  disabled={rename.isPending}
-                >
-                  Rename
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="destructive"
-                  disabled={revoke.isPending}
-                  onClick={() => revoke.mutate({ data: { id: key.id } })}
-                >
-                  Revoke
-                </Button>
-              </form>
+                Revoke
+              </Button>
             </li>
           ))}
         </ul>

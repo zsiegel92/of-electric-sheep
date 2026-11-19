@@ -1,6 +1,6 @@
 import { call } from "@orpc/server";
 import { createServerFn } from "@tanstack/react-start";
-import { apiKeyId, apiKeyName, apiKeyUpdate } from "./api-key-schemas";
+import { apiKeyId, apiKeyName } from "./api-key-schemas";
 import { keyManagement } from "./api-keys";
 import { requireUser } from "./auth";
 
@@ -16,12 +16,6 @@ export const createApiKey = createServerFn({ method: "POST" })
   .validator(apiKeyName)
   .handler(({ data, context }) =>
     call(keyManagement.create, data, { context: { user: context.user } }),
-  );
-
-export const renameApiKey = createServerFn({ method: "POST" })
-  .validator(apiKeyUpdate)
-  .handler(({ data, context }) =>
-    call(keyManagement.update, data, { context: { user: context.user } }),
   );
 
 export const revokeApiKey = createServerFn({ method: "POST" })

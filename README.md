@@ -30,13 +30,13 @@ Add a procedure with `.route()`, `.input()`, `.output()`, and `.handler()`. oRPC
 
 Sign in and open `/api/docs` for Swagger UI or `/api/openapi.json` for the live spec. Use `make openapi > openapi.json` to export it without a server or database. The root loader calls `getCurrentUser` to read the signed-in user from Start’s request context.
 
-For oRPC routes, add an entry to `afterResponseCallbacks` alongside the procedure definitions in `src/server/api.ts`. Try `GET /api/viewer` in Swagger on the local Node server for an example. For a native Start route, call `afterResponse(request, callback)` before returning. The callback runs when Nitro's Node transport finishes sending the response. [Node HTTP response events](https://nodejs.org/api/http.html#event-finish)
+For oRPC routes, add an entry to `afterResponseCallbacks` alongside the procedure definitions in `src/server/api.ts`. Try `GET /api/api-keys` in Swagger on the local Node server for an example. For a native Start route, call `afterResponse(request, callback)` before returning. The callback runs when Nitro's Node transport finishes sending the response. [Node HTTP response events](https://nodejs.org/api/http.html#event-finish)
 
 Better Auth stores the session in a signed HttpOnly JWT cookie. The database schema can use the stable `githubId` claim to key application data. To add a claim, update `userSchema` and populate it in `mapProfileToUser` in `src/server/auth.ts`. The Zod schema supplies Better Auth’s additional field definitions and validators.
 
 ## System One decisions
 
-Sign in and use **API keys** in the navbar to create, list, rename, or revoke keys. The full secret is shown at creation. PostgreSQL stores its hash and a display prefix. The **API keys** section in Swagger exposes the same CRUD operations at `/api/api-keys`. REST clients managing keys send their session cookies and, for writes, an `Origin` header matching the app origin.
+Sign in and use **API keys** in the navbar to create, list, or revoke keys. Use **Copy** in the one-time display to save the full secret. PostgreSQL stores its hash and a display prefix. The **API keys** section in Swagger exposes key creation, reads, and revocation at `/api/api-keys`. REST clients managing keys send their session cookies and, for writes, an `Origin` header matching the app origin.
 
 Send an OfElectricSheep key in the `X-API-Key` header to call System One without a browser session. The System One procedure middleware resolves the key's owner before sending the request to TypeSafe. Configure the upstream `TYPESAFE_BASE_URL` and `TYPESAFE_API_KEY` on the server. In Swagger, use **Authorize** to set the OfElectricSheep key.
 

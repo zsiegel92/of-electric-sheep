@@ -1,5 +1,10 @@
 import { JSON_SCHEMA_REGISTRY } from "@orpc/zod/zod4";
+import type {
+  Experimental_DecisionAnswer,
+  Experimental_DecisionQuestion,
+} from "ai";
 import { z } from "zod";
+import type { RouteRequestBody } from "../route-group";
 
 const content = z.union([
   z.string(),
@@ -89,6 +94,11 @@ const box = z
   })
   .describe("Normalized image edges, measured from the top or left.");
 
+type SdkAnswer = Experimental_DecisionAnswer<Experimental_DecisionQuestion>;
+type SdkAnswerSchema<K extends SdkAnswer["type"]> = z.ZodType<
+  Extract<SdkAnswer, { type: K }>
+>;
+
 export const answer = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("noul"),
@@ -99,15 +109,19 @@ export const answer = z.discriminatedUnion("type", [
     choice: z.string(),
     confidence,
     probabilities,
-  }),
+  }) satisfies SdkAnswerSchema<"choice">,
   z.object({
     type: z.literal("score"),
     score: z.number().describe("Probability-weighted expected rubric score."),
     confidence,
     legend: scoreLegend,
     probabilities,
-  }),
-  z.object({ type: z.literal("box"), box, confidence: confidence.nullable() }),
+  }) satisfies SdkAnswerSchema<"score">,
+  z.object({
+    type: z.literal("box"),
+    box,
+    confidence: confidence.nullable(),
+  }) satisfies SdkAnswerSchema<"box">,
 ]);
 
 const inlineImage = z.object({
@@ -183,3 +197,95 @@ export const validationError = z.object({
     }),
   ),
 });
+
+const state =
+  "The parcel arrived two days late, but the customer is satisfied with the replacement.";
+const examples = {
+  noul: {
+    summary: "Yes/no question",
+    value: {
+      model: "jev-latest",
+      state,
+      questions: {
+        late: { type: "noul", instructions: "Did delivery run late?" },
+      },
+    },
+  },
+  choice: {
+    summary: "Choose a category",
+    value: {
+      model: "jev-latest",
+      state,
+      questions: {
+        topic: {
+          type: "choice",
+          criteria: {
+            shipping: "Concerns about delivery",
+            product: "Concerns about the item",
+          },
+        },
+      },
+    },
+  },
+  score: {
+    summary: "Rate against a rubric",
+    value: {
+      model: "jev-latest",
+      state,
+      questions: {
+        urgency: {
+          type: "score",
+          criteria: ["No action", "Review soon", "Immediate attention"],
+        },
+      },
+    },
+  },
+  box: {
+    summary: "Locate an image region (enable the images header)",
+    value: {
+      model: "jev-preview",
+      state: "photo",
+      questions: {
+        region: {
+          type: "box",
+          instructions: "Locate the visible foreground region.",
+        },
+      },
+      assets: {
+        photo: {
+          type: "image",
+          format: "png",
+          data_base64:
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aW1sAAAAASUVORK5CYII=",
+        },
+      },
+    },
+  },
+} satisfies Record<
+  string,
+  { summary: string; value: z.input<typeof systemOneRequest> }
+>;
+
+const requestPart = z.union([z.string(), z.file()]);
+const imagePart = z.file();
+JSON_SCHEMA_REGISTRY.add(requestPart, {
+  type: "string",
+  contentMediaType: "application/json",
+  contentSchema: { $ref: "#/components/schemas/SystemOneMultipartRequest" },
+});
+JSON_SCHEMA_REGISTRY.add(imagePart, { type: "string", format: "binary" });
+export const upload = z.object({ request: requestPart }).catchall(imagePart);
+
+export const decisionRequestBody = {
+  required: true,
+  content: {
+    "application/json": {
+      schema: { $ref: "#/components/schemas/SystemOneRequest" },
+      examples,
+    },
+    "multipart/form-data": {
+      schema: { $ref: "#/components/schemas/SystemOneUpload" },
+      encoding: { request: { contentType: "application/json" } },
+    },
+  },
+} satisfies RouteRequestBody;
