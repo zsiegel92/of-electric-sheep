@@ -15,6 +15,10 @@ Open [localhost:5173](http://localhost:5173). `make dev` creates `.env` if neede
 
 Set `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` in `.env`, then restart the app. Register **`http://localhost:5173/api/auth/callback/github`** as a redirect URI on your GitHub OAuth App. The callback path changed in the migration to TanStack Start. `APP_URL` defaults to `http://localhost:5173`.
 
+## System One smoke test
+
+With `make dev` running, migrations applied, and `TYPESAFE_API_KEY` configured, run `pnpm test:systemone`. It upserts a local test user and API key, then sends one live decision request with yes/no, choice, and score questions. Run `pnpm exec tsx --env-file=.env scripts/ensure-test-user.ts` to seed the fixture on its own.
+
 ## Background jobs
 
 Signing in with GitHub sends `auth/user.signed-in`. Open [the local Inngest dashboard](http://localhost:8288) to see the `ack-user-sign-in` run and its GitHub ID. Register additional functions in `src/routes/api.inngest.ts`.
@@ -30,7 +34,7 @@ For deployment, configure `INNGEST_EVENT_KEY` and `INNGEST_SIGNING_KEY` and sync
 | `src/server/auth.ts`      | Better Auth configuration, typed `User` and `requireUser`         |
 | `src/server/api.ts`       | oRPC router, Swagger setup, and spec export                       |
 | `src/server/functions.ts` | Start server functions for identity and API-key management        |
-| `src/db/schema.ts`        | Drizzle table definitions                                         |
+| `src/lib/db/schema.ts`    | Drizzle table definitions                                         |
 
 Add a procedure with `.route()`, `.input()`, `.output()`, and `.handler()`. oRPC validates inputs and outputs at runtime and derives the handler types and OpenAPI spec from the Zod schemas. Procedures get the authenticated user through `context.user`. The Start server functions for API keys pass along that same request context.
 

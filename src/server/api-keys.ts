@@ -3,8 +3,8 @@ import { createHash, randomBytes } from "node:crypto";
 import { os } from "@orpc/server";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
-import { getDb } from "../db";
-import { apiKeys, users } from "../db/schema";
+import { getDb } from "@/lib/db/db";
+import { apiKeys, users } from "@/lib/db/schema";
 import {
   apiKey,
   apiKeyId,
@@ -16,27 +16,34 @@ import { type User, userSchema } from "./auth";
 import { routeGroup } from "./route-group";
 
 export const apiKeyHeader = "X-API-Key";
-const keyFormat = /^oes_[\w-]{43}$/;
+export const apiKeySecret = z.string().regex(/^oes_[\w-]{43}$/);
 
 function hashKey(secret: string) {
   return createHash("sha256").update(secret).digest("hex");
 }
 
+export function apiKeyStorageFields(secret: string) {
+  return { prefix: secret.slice(0, 12), keyHash: hashKey(secret) };
+}
+
 export async function findApiKeyUser(headers: Headers): Promise<User | null> {
-  const secret = headers.get(apiKeyHeader);
-  if (!secret || !keyFormat.test(secret)) return null;
+  const secret = apiKeySecret.safeParse(headers.get(apiKeyHeader));
+  if (!secret.success) return null;
 
   const [owner] = await getDb()
     .select({ name: users.name, email: users.email, githubId: users.githubId })
     .from(apiKeys)
     .innerJoin(users, eq(apiKeys.userId, users.githubId))
-    .where(eq(apiKeys.keyHash, hashKey(secret)));
+    .where(eq(apiKeys.keyHash, hashKey(secret.data)));
   const result = userSchema.safeParse(owner);
   return result.success ? result.data : null;
 }
 
-async function saveUser(user: User) {
-  await getDb()
+export async function saveUser(
+  user: User,
+  db: Pick<ReturnType<typeof getDb>, "insert"> = getDb(),
+) {
+  await db
     .insert(users)
     .values(user)
     .onConflictDoUpdate({
@@ -109,8 +116,7 @@ export const keyManagement = {
         .values({
           userId: user.githubId,
           name: input.name,
-          prefix: secret.slice(0, 12),
-          keyHash: hashKey(secret),
+          ...apiKeyStorageFields(secret),
         })
         .returning(columns);
       if (!row) throw new Error("API key was not created");
