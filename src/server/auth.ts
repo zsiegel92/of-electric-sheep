@@ -1,6 +1,8 @@
 import "@tanstack/react-start/server-only";
 import { betterAuth } from "better-auth";
+import { createAuthMiddleware } from "better-auth/api";
 import { z } from "zod";
+import { inngest, userSignedIn } from "../lib/inngest/inngest";
 import { zodUserSchemaToBetterAuthUserSpec } from "./zod-user-spec";
 
 const envSchema = z.object({
@@ -42,6 +44,18 @@ function createAuth() {
     // Provider-mapped claims can be supplied at sign-in, but cannot be edited.
     disabledPaths: ["/update-user"],
     user: zodUserSchemaToBetterAuthUserSpec(userSchema),
+    hooks: {
+      after: createAuthMiddleware(async ({ path, context }) => {
+        if (path !== "/callback/:id" || !context.newSession) return;
+
+        try {
+          const { githubId } = userSchema.parse(context.newSession.user);
+          await inngest.send(userSignedIn.create({ githubId }));
+        } catch (error) {
+          console.error("Could not publish auth/user.signed-in", error);
+        }
+      }),
+    },
     socialProviders:
       env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET
         ? {

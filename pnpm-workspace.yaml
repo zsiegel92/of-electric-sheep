@@ -1,5 +1,7 @@
 allowBuilds:
   esbuild: true
+  protobufjs: false
+  inngest-cli: true
 minimumReleaseAgeExclude:
   - "@orpc/client@1.16.3"
   - "@orpc/contract@1.16.3"

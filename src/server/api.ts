@@ -1,9 +1,7 @@
 import type { OpenAPIGeneratorGenerateOptions } from "@orpc/openapi";
 import type { AnyRouter } from "@orpc/server";
 import { ZodToJsonSchemaConverter } from "@orpc/zod/zod4";
-import type { afterResponse } from "./after-response";
 import { apiKeyHeader, apiKeysTag, keyManagement } from "./api-keys";
-import type { ProcedureNames } from "./router-type-helpers";
 import { systemOne, systemOneTag } from "./system-one/router";
 import {
   answer,
@@ -19,14 +17,6 @@ export const api = {
   systemOne,
   apiKeys: keyManagement,
 } satisfies AnyRouter;
-
-export const afterResponseCallbacks = {
-  "apiKeys.list": () => {
-    process.stdout.write("Finished sending GET /api/api-keys\n");
-  },
-} satisfies Partial<
-  Record<ProcedureNames<typeof api>, Parameters<typeof afterResponse>[1]>
->;
 
 export const schemaConverters = [new ZodToJsonSchemaConverter()];
 export const specOptions = {

@@ -11,9 +11,15 @@ make install
 make dev
 ```
 
-Open [localhost:5173](http://localhost:5173). `make dev` creates `.env` if needed, starts local PostgreSQL on port 54873, applies migrations, and starts Vite. Use `make db-stop` to stop PostgreSQL.
+Open [localhost:5173](http://localhost:5173). `make dev` creates `.env` if needed, starts local PostgreSQL on port 54873, applies migrations, and runs Vite and the Inngest dev server together. Ctrl-C stops both. Use `make db-stop` to stop PostgreSQL.
 
 Set `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` in `.env`, then restart the app. Register **`http://localhost:5173/api/auth/callback/github`** as a redirect URI on your GitHub OAuth App. The callback path changed in the migration to TanStack Start. `APP_URL` defaults to `http://localhost:5173`.
+
+## Background jobs
+
+Signing in with GitHub sends `auth/user.signed-in`. Open [the local Inngest dashboard](http://localhost:8288) to see the `ack-user-sign-in` run and its GitHub ID. Register additional functions in `src/routes/api.inngest.ts`.
+
+For deployment, configure `INNGEST_EVENT_KEY` and `INNGEST_SIGNING_KEY` and sync the app's `/api/inngest` endpoint with Inngest. For self-hosting, also set `INNGEST_BASE_URL` to your Inngest server. Local dev mode is enabled by the dev command.
 
 ## Find your way around
 
@@ -29,8 +35,6 @@ Set `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` in `.env`, then restart the ap
 Add a procedure with `.route()`, `.input()`, `.output()`, and `.handler()`. oRPC validates inputs and outputs at runtime and derives the handler types and OpenAPI spec from the Zod schemas. Procedures get the authenticated user through `context.user`. The Start server functions for API keys pass along that same request context.
 
 Sign in and open `/api/docs` for Swagger UI or `/api/openapi.json` for the live spec. Use `make openapi > openapi.json` to export it without a server or database. The root loader calls `getCurrentUser` to read the signed-in user from Start’s request context.
-
-For oRPC routes, add an entry to `afterResponseCallbacks` alongside the procedure definitions in `src/server/api.ts`. Try `GET /api/api-keys` in Swagger on the local Node server for an example. For a native Start route, call `afterResponse(request, callback)` before returning. The callback runs when Nitro's Node transport finishes sending the response. [Node HTTP response events](https://nodejs.org/api/http.html#event-finish)
 
 Better Auth stores the session in a signed HttpOnly JWT cookie. The database schema can use the stable `githubId` claim to key application data. To add a claim, update `userSchema` and populate it in `mapProfileToUser` in `src/server/auth.ts`. The Zod schema supplies Better Auth’s additional field definitions and validators.
 

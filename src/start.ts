@@ -10,7 +10,9 @@ const authenticate = createMiddleware().server(
   async ({ request, handlerType, next }) => {
     const url = new URL(request.url);
     const isPublic =
-      url.pathname === "/sign-in" || url.pathname.startsWith("/api/auth/");
+      url.pathname === "/sign-in" ||
+      url.pathname === "/api/inngest" ||
+      url.pathname.startsWith("/api/auth/");
     const usesApiKey = isSystemOneRequest(url.pathname);
     const user = isPublic || usesApiKey ? null : await getUser(request.headers);
     if (!isPublic && !usesApiKey && !user) {
@@ -44,6 +46,7 @@ export const startInstance = createStart(() => ({
         return (
           handlerType === "serverFn" ||
           (!["GET", "HEAD", "OPTIONS"].includes(request.method) &&
+            pathname !== "/api/inngest" &&
             !pathname.startsWith("/api/auth/") &&
             !isSystemOneRequest(pathname))
         );
