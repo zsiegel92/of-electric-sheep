@@ -1,21 +1,40 @@
 import { ORPCError } from "@orpc/server";
-import { JSON_SCHEMA_REGISTRY } from "@orpc/zod/zod4";
 import type {
-  Experimental_DecisionAnswer,
-  Experimental_DecisionQuestion,
-} from "ai";
+  BoxCoordinates,
+  BoxResponse,
+  ChoiceResponse,
+  EntryType,
+  JsonValue,
+  ModelCard,
+  NoulResponse,
+  Question,
+  Questions,
+  ScoreCriteria,
+  ScoreResponse,
+  SystemOneRequest,
+  SystemOneResult,
+  Usage,
+} from "@typesafe-ai/sdk";
 import { z } from "zod";
 import type { RouteRequestBody } from "@/server/route-group";
 
 const content = z.union([
   z.string(),
-  z.record(z.string(), z.unknown()),
-  z.array(z.unknown()),
-]);
+  z.record(z.string(), z.json()),
+  z.array(z.json()),
+]) satisfies z.ZodType<NonNullable<EntryType>>;
 const instructions = content
-  .nullish()
+  .nullable()
+  .exactOptional()
   .describe("What the model should decide in this question.");
 const named = z.string().min(1);
+const scoreCriteria = z
+  .tuple([content, content], content)
+  .check(z.minLength(2), z.maxLength(10, "Provide at most 10 levels"))
+  .describe(
+    "Ordered rubric levels, starting at zero.",
+  ) satisfies z.ZodType<ScoreCriteria>;
+
 const probability = z.number().min(0).max(1);
 const probabilities = z
   .record(named, probability)
@@ -23,7 +42,9 @@ const probabilities = z
 const confidence = probability.describe("Confidence from 0 to 1.");
 export const scoreLegend = z
   .record(named, content)
-  .describe("Rubric descriptions indexed by level.");
+  .describe("Rubric descriptions indexed by level.") satisfies z.ZodType<
+  Record<string, JsonValue>
+>;
 
 function namedEntries<T extends z.ZodType>(
   value: T,
@@ -40,13 +61,18 @@ function namedEntries<T extends z.ZodType>(
       : "Provide at least one entry",
   );
 
-  JSON_SCHEMA_REGISTRY.add(schema, {
+  return schema.meta({
     description,
     minProperties: 1,
     ...(maxProperties === undefined ? {} : { maxProperties }),
   });
-  return schema;
 }
+
+export const choiceCriteria = namedEntries(
+  content.nullable(),
+  "Option names and their descriptions. Use null to rely on the option name alone.",
+  255,
+);
 
 export const question = z.discriminatedUnion("type", [
   z
@@ -54,8 +80,12 @@ export const question = z.discriminatedUnion("type", [
       type: z.literal("noul"),
       instructions,
       criteria: z
-        .object({ true: content.nullish(), false: content.nullish() })
-        .nullish()
+        .object({
+          true: content.nullable().exactOptional(),
+          false: content.nullable().exactOptional(),
+        })
+        .nullable()
+        .exactOptional()
         .describe("What counts as a yes or no answer."),
     })
     .describe("Noul — evaluate a yes/no question or statement."),
@@ -63,28 +93,20 @@ export const question = z.discriminatedUnion("type", [
     .object({
       type: z.literal("choice"),
       instructions,
-      criteria: namedEntries(
-        content.nullable(),
-        "Option names and their descriptions. Use null to rely on the option name alone.",
-        255,
-      ),
+      criteria: choiceCriteria,
     })
     .describe("Choice — select one named option."),
   z
     .object({
       type: z.literal("score"),
       instructions,
-      criteria: z
-        .array(content)
-        .min(1)
-        .max(10)
-        .describe("Ordered rubric levels, starting at zero."),
+      criteria: scoreCriteria,
     })
     .describe("Score — rate content against an ordered rubric."),
   z
     .object({ type: z.literal("box"), instructions })
     .describe("Box — locate a region in an image. Requires the images header."),
-]);
+]) satisfies z.ZodType<Question>;
 
 const box = z
   .object({
@@ -93,12 +115,16 @@ const box = z
     left: probability,
     right: probability,
   })
-  .describe("Normalized image edges, measured from the top or left.");
+  .describe(
+    "Normalized image edges, measured from the top or left.",
+  ) satisfies z.ZodType<BoxCoordinates>;
 
-type SdkAnswer = Experimental_DecisionAnswer<Experimental_DecisionQuestion>;
-type SdkAnswerSchema<K extends SdkAnswer["type"]> = z.ZodType<
-  Extract<SdkAnswer, { type: K }>
->;
+// The SDK's generic score legend expands recursively for untyped JSON criteria.
+type TypeSafeAnswer =
+  | NoulResponse
+  | ChoiceResponse
+  | (Omit<ScoreResponse, "legend"> & { legend: Record<string, JsonValue> })
+  | BoxResponse;
 
 export const answer = z.discriminatedUnion("type", [
   z.object({
@@ -110,20 +136,20 @@ export const answer = z.discriminatedUnion("type", [
     choice: z.string(),
     confidence,
     probabilities,
-  }) satisfies SdkAnswerSchema<"choice">,
+  }),
   z.object({
     type: z.literal("score"),
     score: z.number().describe("Probability-weighted expected rubric score."),
     confidence,
     legend: scoreLegend,
     probabilities,
-  }) satisfies SdkAnswerSchema<"score">,
+  }),
   z.object({
     type: z.literal("box"),
     box,
     confidence: confidence.nullable(),
-  }) satisfies SdkAnswerSchema<"box">,
-]);
+  }),
+]) satisfies z.ZodType<TypeSafeAnswer>;
 
 const inlineImage = z.object({
   type: z.literal("image"),
@@ -144,7 +170,7 @@ export const systemOneRequest = z.object({
     inlineImage,
     "Inline images keyed by placeholders used in state or questions.",
   ).optional(),
-});
+}) satisfies z.ZodType<Omit<SystemOneRequest, "assets">>;
 
 export const systemOneMultipartRequestSchema = systemOneRequest.extend({
   assets: namedEntries(
@@ -159,30 +185,36 @@ export const systemOneMultipartRequestSchema = systemOneRequest.extend({
   ).optional(),
 });
 
+type TypeSafeDecisionResponse = Omit<SystemOneResult<Questions>, "answers"> & {
+  answers: Record<string, TypeSafeAnswer>;
+};
+
+const usage = z
+  .object({
+    input_tokens: z.int().nonnegative(),
+    output_tokens: z.int().nonnegative(),
+  })
+  .describe("Input and output token counts.") satisfies z.ZodType<Usage>;
+
 export const systemOneResponse = z.object({
   model: named.describe(
     "The model that answered the request. It may differ from the requested alias.",
   ),
   answers: namedEntries(answer, "Answers keyed by the input question names."),
-  usage: z
-    .object({
-      input_tokens: z.int().nonnegative(),
-      output_tokens: z.int().nonnegative(),
-    })
-    .describe("Input and output token counts."),
-});
+  usage,
+}) satisfies z.ZodType<TypeSafeDecisionResponse>;
+
+const modelCard = z.object({
+  name: named.describe("Model name or alias accepted by System One."),
+  description: z.string(),
+  release_date: z
+    .union([z.iso.date(), z.iso.datetime({ offset: true })])
+    .describe("ISO release date or timestamp."),
+}) satisfies z.ZodType<ModelCard>;
 
 export const modelList = z.object({
-  models: z.array(
-    z.object({
-      name: named.describe("Model name or alias accepted by System One."),
-      description: z.string(),
-      release_date: z
-        .union([z.iso.date(), z.iso.datetime({ offset: true })])
-        .describe("ISO release date or timestamp."),
-    }),
-  ),
-});
+  models: z.array(modelCard),
+}) satisfies z.ZodType<{ models: ModelCard[] }>;
 
 export const badRequest = z.object({
   detail: z.union([z.string(), z.record(z.string(), z.unknown())]),
@@ -276,18 +308,12 @@ const examples = {
 >;
 
 const requestPart = z.union([z.string(), z.file()]);
-const imagePart = z.file();
-JSON_SCHEMA_REGISTRY.add(requestPart, {
-  type: "string",
-  contentMediaType: "application/json",
-  contentSchema: { $ref: "#/components/schemas/SystemOneMultipartRequest" },
-});
-JSON_SCHEMA_REGISTRY.add(imagePart, { type: "string", format: "binary" });
+export const imagePart = z.file();
 export const upload = z.object({ request: requestPart }).catchall(imagePart);
 
 export async function parseSystemOneMultipartRequest(
   input: z.output<typeof upload>,
-): Promise<FormData> {
+) {
   const { request, ...files } = input;
   const json = typeof request === "string" ? request : await request.text();
   let parsed: unknown;
@@ -307,17 +333,26 @@ export async function parseSystemOneMultipartRequest(
     });
   }
 
-  const parts = new Set(Object.keys(files));
-  for (const asset of Object.values(result.data.assets ?? {})) {
-    if ("part" in asset && !parts.delete(asset.part)) {
-      throw new ORPCError("BAD_REQUEST", {
-        data: {
-          detail:
-            "Each image asset part must reference a unique uploaded file.",
-        },
-      });
-    }
-  }
+  const { assets = {}, ...payload } = result.data;
+  const parts = new Map(Object.entries(files));
+  const resolvedAssets = Object.fromEntries(
+    Object.entries(assets).map<[string, File | z.output<typeof inlineImage>]>(
+      ([name, asset]) => {
+        if (!("part" in asset)) return [name, asset];
+        const file = parts.get(asset.part);
+        if (!file) {
+          throw new ORPCError("BAD_REQUEST", {
+            data: {
+              detail:
+                "Each image asset part must reference a unique uploaded file.",
+            },
+          });
+        }
+        parts.delete(asset.part);
+        return [name, file];
+      },
+    ),
+  );
   if (parts.size > 0) {
     throw new ORPCError("BAD_REQUEST", {
       data: {
@@ -326,14 +361,7 @@ export async function parseSystemOneMultipartRequest(
     });
   }
 
-  const form = new FormData();
-  form.set(
-    "request",
-    new Blob([JSON.stringify(result.data)], { type: "application/json" }),
-    "request.json",
-  );
-  for (const [name, file] of Object.entries(files)) form.set(name, file);
-  return form;
+  return { ...payload, assets: resolvedAssets };
 }
 
 export const imagesHeader = "typesafe-danger-zone-images";

@@ -53,7 +53,7 @@ Set `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` in the server environment to
 - `GET /api/system-one/models` lists available Jev models and aliases.
 - `POST /api/system-one` evaluates named yes/no, choice, score, or bounding-box questions. It accepts JSON with inline images or multipart with a JSON `request` part and named image files.
 
-The **System One · TypeSafe** section in `/api/docs` shows request examples and the two optional capability headers. `src/server/system-one/router.ts` registers the procedures and applies API-key auth. The decision procedure and its TypeSafe HTTP call live together in `src/lib/system-one/system-one-api-client.ts`. [TypeSafe API reference](https://api.typesafe.ai/docs)
+The **System One · TypeSafe** section in `/api/docs` shows request examples and the two optional capability headers. `src/server/system-one/router.ts` registers the procedures and applies API-key auth. The decision procedure and its official TypeSafe SDK call live in `src/lib/system-one/system-one-api-client.ts`. Score questions accept two to ten rubric levels. [TypeSafe API reference](https://api.typesafe.ai/docs)
 
 ## Database and production
 

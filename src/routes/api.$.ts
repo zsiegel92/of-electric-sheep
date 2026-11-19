@@ -2,10 +2,12 @@ import type { OpenAPIGeneratorGenerateOptions } from "@orpc/openapi";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import { OpenAPIReferencePlugin } from "@orpc/openapi/plugins";
 import type { AnyRouter } from "@orpc/server";
-import { ZodToJsonSchemaConverter } from "@orpc/zod/zod4";
+import { JSON_SCHEMA_REGISTRY, ZodToJsonSchemaConverter } from "@orpc/zod/zod4";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   answer,
+  choiceCriteria,
+  imagePart,
   modelList,
   question,
   systemOneMultipartRequestSchema,
@@ -22,6 +24,27 @@ export const apiRouters = {
   systemOne: systemOneRouter,
   apiKeys: keyManagementRouter,
 } satisfies AnyRouter;
+
+for (const schema of [
+  choiceCriteria,
+  systemOneRequest.shape.questions,
+  systemOneRequest.shape.assets.unwrap(),
+  systemOneMultipartRequestSchema.shape.assets.unwrap(),
+  systemOneResponse.shape.answers,
+]) {
+  const { description, minProperties, maxProperties } = schema.meta() ?? {};
+  JSON_SCHEMA_REGISTRY.add(schema, {
+    ...(description === undefined ? {} : { description }),
+    ...(typeof minProperties === "number" ? { minProperties } : {}),
+    ...(typeof maxProperties === "number" ? { maxProperties } : {}),
+  });
+}
+JSON_SCHEMA_REGISTRY.add(upload.shape.request, {
+  type: "string",
+  contentMediaType: "application/json",
+  contentSchema: { $ref: "#/components/schemas/SystemOneMultipartRequest" },
+});
+JSON_SCHEMA_REGISTRY.add(imagePart, { type: "string", format: "binary" });
 
 const schemaConverters = [new ZodToJsonSchemaConverter()];
 const specOptions = {
