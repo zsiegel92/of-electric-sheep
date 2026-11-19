@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { authClient } from "../auth-client";
-import type { User } from "../server/auth";
+import type { User } from "../lib/auth";
 
 export function AuthControl({ user }: { user: User | null | undefined }) {
   const [pending, setPending] = useState(false);

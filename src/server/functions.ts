@@ -1,8 +1,8 @@
 import { call } from "@orpc/server";
 import { createServerFn } from "@tanstack/react-start";
-import { apiKeyId, apiKeyName } from "./api-key-schemas";
+import { apiKeyId, apiKeyName } from "@/lib/api-keys/schemas";
+import { requireUser } from "../lib/auth";
 import { keyManagementRouter } from "./api-keys";
-import { requireUser } from "./auth";
 
 export const getCurrentUser = createServerFn().handler(({ context }) =>
   requireUser(context.user),

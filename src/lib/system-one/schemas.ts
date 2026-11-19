@@ -46,33 +46,9 @@ export const scoreLegend = z
   Record<string, JsonValue>
 >;
 
-function namedEntries<T extends z.ZodType>(
-  value: T,
-  description: string,
-  maxProperties?: number,
-) {
-  const schema = z.record(named, value).refine(
-    (entries) => {
-      const size = Object.keys(entries).length;
-      return size > 0 && (maxProperties === undefined || size <= maxProperties);
-    },
-    maxProperties
-      ? `Provide 1 to ${maxProperties} entries`
-      : "Provide at least one entry",
-  );
-
-  return schema.meta({
-    description,
-    minProperties: 1,
-    ...(maxProperties === undefined ? {} : { maxProperties }),
-  });
+function hasEntries(entries: Record<string, unknown>) {
+  return Object.keys(entries).length > 0;
 }
-
-export const choiceCriteria = namedEntries(
-  content.nullable(),
-  "Option names and their descriptions. Use null to rely on the option name alone.",
-  255,
-);
 
 export const question = z.discriminatedUnion("type", [
   z
@@ -93,7 +69,16 @@ export const question = z.discriminatedUnion("type", [
     .object({
       type: z.literal("choice"),
       instructions,
-      criteria: choiceCriteria,
+      criteria: z
+        .record(named, content.nullable())
+        .refine(hasEntries, "Provide at least one option")
+        .refine(
+          (entries) => Object.keys(entries).length <= 255,
+          "Provide at most 255 options",
+        )
+        .describe(
+          "Provide 1–255 named options. Use null to rely on the option name alone.",
+        ),
     })
     .describe("Choice — select one named option."),
   z
@@ -162,27 +147,38 @@ export const systemOneRequest = z.object({
     .describe("A model name or alias from the models endpoint.")
     .meta({ examples: ["jev-latest"] }),
   state: content.describe("Content all questions refer to."),
-  questions: namedEntries(
-    question,
-    "Questions keyed by caller-chosen names. Answers use the same names.",
-  ),
-  assets: namedEntries(
-    inlineImage,
-    "Inline images keyed by placeholders used in state or questions.",
-  ).optional(),
+  questions: z
+    .record(named, question)
+    .refine(hasEntries, "Provide at least one question")
+    .describe(
+      "At least one question, keyed by name. Answers use the same names.",
+    ),
+  assets: z
+    .record(named, inlineImage)
+    .refine(hasEntries, "Provide at least one image asset")
+    .describe(
+      "If supplied, include at least one inline image, keyed by its placeholder.",
+    )
+    .optional(),
 }) satisfies z.ZodType<Omit<SystemOneRequest, "assets">>;
 
 export const systemOneMultipartRequestSchema = systemOneRequest.extend({
-  assets: namedEntries(
-    z.union([
-      z.object({
-        type: z.literal("image"),
-        part: named.describe("Name of the multipart image field."),
-      }),
-      inlineImage,
-    ]),
-    "Inline images or references to uploaded image parts, keyed by placeholder.",
-  ).optional(),
+  assets: z
+    .record(
+      named,
+      z.union([
+        z.object({
+          type: z.literal("image"),
+          part: named.describe("Name of the multipart image field."),
+        }),
+        inlineImage,
+      ]),
+    )
+    .refine(hasEntries, "Provide at least one image asset")
+    .describe(
+      "If supplied, include at least one inline image or uploaded file reference, keyed by placeholder.",
+    )
+    .optional(),
 });
 
 type TypeSafeDecisionResponse = Omit<SystemOneResult<Questions>, "answers"> & {
@@ -200,7 +196,10 @@ export const systemOneResponse = z.object({
   model: named.describe(
     "The model that answered the request. It may differ from the requested alias.",
   ),
-  answers: namedEntries(answer, "Answers keyed by the input question names."),
+  answers: z
+    .record(named, answer)
+    .refine(hasEntries, "Expected at least one answer")
+    .describe("At least one answer, keyed by the input question names."),
   usage,
 }) satisfies z.ZodType<TypeSafeDecisionResponse>;
 
@@ -308,8 +307,7 @@ const examples = {
 >;
 
 const requestPart = z.union([z.string(), z.file()]);
-export const imagePart = z.file();
-export const upload = z.object({ request: requestPart }).catchall(imagePart);
+export const upload = z.object({ request: requestPart }).catchall(z.file());
 
 export async function parseSystemOneMultipartRequest(
   input: z.output<typeof upload>,

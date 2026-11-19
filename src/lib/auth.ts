@@ -2,7 +2,7 @@ import "@tanstack/react-start/server-only";
 import { betterAuth } from "better-auth";
 import { createAuthMiddleware } from "better-auth/api";
 import { z } from "zod";
-import { inngest, userSignedIn } from "../lib/inngest/inngest";
+import { inngest, userSignedIn } from "./inngest/inngest";
 import { zodUserSchemaToBetterAuthUserSpec } from "./zod-user-spec";
 
 const envSchema = z.object({

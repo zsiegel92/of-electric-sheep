@@ -10,13 +10,9 @@ import {
 } from "@typesafe-ai/sdk";
 import { z } from "zod";
 import { traceGeneration } from "@/lib/langfuse";
-import type { SystemOneRouteBuilder } from "@/server/system-one/router";
-import { systemOneRoutes } from "./routes";
 import {
   badRequest,
   type DecisionInputBody,
-  decisionInput,
-  decisionRequestBody,
   imagesHeader,
   longContextHeader,
   modelList,
@@ -34,7 +30,10 @@ const typesafeEnv = z.object({
 });
 
 function getTypeSafeBaseUrlAndApiKey() {
-  const env = typesafeEnv.safeParse(process.env);
+  const env = typesafeEnv.safeParse({
+    TYPESAFE_BASE_URL: process.env["TYPESAFE_BASE_URL"],
+    TYPESAFE_API_KEY: process.env["TYPESAFE_API_KEY"],
+  });
   if (!env.success)
     throw new ORPCError("SERVICE_UNAVAILABLE", {
       message: typesafeErrors.SERVICE_UNAVAILABLE.message,
@@ -158,23 +157,4 @@ export async function runDecision(
     });
     return decision;
   });
-}
-
-export function createDecisionRoute(route: SystemOneRouteBuilder) {
-  return route({
-    ...systemOneRoutes.decide,
-    summary: "Evaluate content with System One",
-    description:
-      "Ask named yes/no, choice, score, or box questions about shared content. Mix question types in one request. Requires an API key created in OfElectricSheep.",
-    inputStructure: "detailed",
-    requestBody: decisionRequestBody,
-  })
-    .input(decisionInput)
-    .output(systemOneResponse)
-    .handler(({ input: { body, headers } }) =>
-      runDecision(body, {
-        enableImages: headers[imagesHeader] === "true",
-        enableLongContext: headers[longContextHeader] === "true",
-      }),
-    );
 }

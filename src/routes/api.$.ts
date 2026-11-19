@@ -1,23 +1,23 @@
-import type { OpenAPIGeneratorGenerateOptions } from "@orpc/openapi";
+import type {
+  OpenAPIGeneratorGenerateOptions,
+  SchemaConverter,
+} from "@orpc/openapi";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import { OpenAPIReferencePlugin } from "@orpc/openapi/plugins";
 import type { AnyRouter } from "@orpc/server";
-import { JSON_SCHEMA_REGISTRY, ZodToJsonSchemaConverter } from "@orpc/zod/zod4";
+import { ZodToJsonSchemaConverter } from "@orpc/zod/zod4";
 import { createFileRoute } from "@tanstack/react-router";
+import { apiKeyHeader } from "@/lib/api-keys/schemas";
+import type { User } from "../lib/auth";
 import {
   answer,
-  choiceCriteria,
-  imagePart,
   modelList,
   question,
   systemOneMultipartRequestSchema,
   systemOneRequest,
   systemOneResponse,
-  upload,
 } from "../lib/system-one/schemas";
-import { apiKeyHeader } from "../server/api-key-schemas";
 import { apiKeysTag, keyManagementRouter } from "../server/api-keys";
-import type { User } from "../server/auth";
 import { systemOneRouter, systemOneTag } from "../server/system-one/router";
 
 export const apiRouters = {
@@ -25,38 +25,37 @@ export const apiRouters = {
   apiKeys: keyManagementRouter,
 } satisfies AnyRouter;
 
-for (const schema of [
-  choiceCriteria,
-  systemOneRequest.shape.questions,
-  systemOneRequest.shape.assets.unwrap(),
-  systemOneMultipartRequestSchema.shape.assets.unwrap(),
-  systemOneResponse.shape.answers,
-]) {
-  const { description, minProperties, maxProperties } = schema.meta() ?? {};
-  JSON_SCHEMA_REGISTRY.add(schema, {
-    ...(description === undefined ? {} : { description }),
-    ...(typeof minProperties === "number" ? { minProperties } : {}),
-    ...(typeof maxProperties === "number" ? { maxProperties } : {}),
-  });
-}
-JSON_SCHEMA_REGISTRY.add(upload.shape.request, {
-  type: "string",
-  contentMediaType: "application/json",
-  contentSchema: { $ref: "#/components/schemas/SystemOneMultipartRequest" },
-});
-JSON_SCHEMA_REGISTRY.add(imagePart, { type: "string", format: "binary" });
-
 const schemaConverters = [new ZodToJsonSchemaConverter()];
+type JsonSchema = Awaited<ReturnType<SchemaConverter["convert"]>>[1];
+
 const specOptions = {
   info: { title: "Of Electric Sheep", version: "1.0.0" },
   servers: [{ url: "/api" }],
   components: {
+    schemas: {
+      SystemOneUpload: {
+        type: "object",
+        required: ["request"],
+        properties: {
+          request: {
+            // oRPC's OpenAPI type omits the JSON Schema contentSchema keyword.
+            ...({
+              type: "string",
+              contentMediaType: "application/json",
+              contentSchema: {
+                $ref: "#/components/schemas/SystemOneMultipartRequest",
+              },
+            } as const satisfies JsonSchema),
+          },
+        },
+        additionalProperties: { type: "string", format: "binary" },
+      },
+    },
     securitySchemes: {
       ApiKey: { type: "apiKey", in: "header", name: apiKeyHeader },
     },
   },
   commonSchemas: {
-    SystemOneUpload: { schema: upload, strategy: "input" },
     SystemOneRequest: { schema: systemOneRequest, strategy: "input" },
     SystemOneMultipartRequest: {
       schema: systemOneMultipartRequestSchema,

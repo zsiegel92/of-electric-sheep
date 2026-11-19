@@ -1,14 +1,22 @@
 import "@tanstack/react-start/server-only";
 import { type AnyProcedure, os } from "@orpc/server";
-import { systemOneRoutes } from "@/lib/system-one/routes";
-import { modelList, typesafeErrors } from "@/lib/system-one/schemas";
+import { findApiKeyUser } from "@/lib/api-keys/queries";
+import type { User } from "@/lib/auth";
 import {
-  createDecisionRoute,
+  decisionInput,
+  decisionRequestBody,
+  imagesHeader,
+  longContextHeader,
+  modelList,
+  systemOneResponse,
+  typesafeErrors,
+} from "@/lib/system-one/schemas";
+import {
   listModels,
+  runDecision,
 } from "@/lib/system-one/system-one-api-client";
-import { findApiKeyUser } from "../api-keys";
-import type { User } from "../auth";
 import { routeGroup } from "../route-group";
+import { systemOneRoutes } from "./routes";
 
 export const systemOneTag = "System One · TypeSafe";
 
@@ -29,8 +37,6 @@ const route = routeGroup(os.$context<{ user: User }>(), {
   security: [{ ApiKey: [] }],
 });
 
-export type SystemOneRouteBuilder = typeof route;
-
 export const systemOneRouter = apiKeyAuth.router({
   models: route({
     ...systemOneRoutes.models,
@@ -41,5 +47,20 @@ export const systemOneRouter = apiKeyAuth.router({
     .output(modelList)
     .handler(listModels),
 
-  decide: createDecisionRoute(route),
+  decide: route({
+    ...systemOneRoutes.decide,
+    summary: "Evaluate content with System One",
+    description:
+      "Ask named yes/no, choice, score, or box questions about shared content. Mix question types in one request. Requires an API key created in OfElectricSheep.",
+    inputStructure: "detailed",
+    requestBody: decisionRequestBody,
+  })
+    .input(decisionInput)
+    .output(systemOneResponse)
+    .handler(({ input: { body, headers } }) =>
+      runDecision(body, {
+        enableImages: headers[imagesHeader] === "true",
+        enableLongContext: headers[longContextHeader] === "true",
+      }),
+    ),
 } satisfies Record<keyof typeof systemOneRoutes, AnyProcedure>);
