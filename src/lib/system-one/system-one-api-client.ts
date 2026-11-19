@@ -1,6 +1,7 @@
 import "@tanstack/react-start/server-only";
 import { ORPCError } from "@orpc/server";
 import { z } from "zod";
+import { traceGeneration } from "@/lib/langfuse";
 import type { SystemOneRouteBuilder } from "@/server/system-one/router";
 import { systemOneRoutes } from "./routes";
 import {
@@ -114,10 +115,20 @@ export async function runDecision(
       ? await parseSystemOneMultipartRequest(input)
       : JSON.stringify(input);
   if (typeof body === "string") headers.set("Content-Type", "application/json");
-  return typesafeRequest("v1/systemone", systemOneResponse, {
-    method: "POST",
-    headers,
-    body,
+  return traceGeneration("system-one.decide", async (generation) => {
+    const decision = await typesafeRequest("v1/systemone", systemOneResponse, {
+      method: "POST",
+      headers,
+      body,
+    });
+    generation?.update({
+      model: decision.model,
+      usageDetails: {
+        input: decision.usage.input_tokens,
+        output: decision.usage.output_tokens,
+      },
+    });
+    return decision;
   });
 }
 

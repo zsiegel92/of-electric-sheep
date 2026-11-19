@@ -48,7 +48,7 @@ Sign in and use **API keys** in the navbar to create, list, or revoke keys. Use 
 
 Send an OfElectricSheep key in the `X-API-Key` header to call System One without a browser session. The System One procedure middleware resolves the key's owner before sending the request to TypeSafe. Configure the upstream `TYPESAFE_BASE_URL` and `TYPESAFE_API_KEY` on the server. In Swagger, use **Authorize** to set the OfElectricSheep key.
 
-Server functions can call `decideWithAiSdk({ model, state, questions })` from `src/lib/system-one/system-one-ai-sdk-client.ts` with a configured AI SDK decision model. The adapter maps SDK answers to the existing System One schema and uses TypeSafe metadata for choice and score confidence and score rubrics.
+Set `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` in the server environment to trace System One calls. Set `LANGFUSE_BASE_URL` for a non-EU project or self-hosted instance. The default is `https://cloud.langfuse.com`. Traces record timing, model, token counts, and failures. Request and response content stays out of traces. [Langfuse setup](https://langfuse.com/docs/observability/sdk/overview)
 
 - `GET /api/system-one/models` lists available Jev models and aliases.
 - `POST /api/system-one` evaluates named yes/no, choice, score, or bounding-box questions. It accepts JSON with inline images or multipart with a JSON `request` part and named image files.
