@@ -17,7 +17,7 @@ Set `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` in `.env`, then restart the ap
 
 ## System One smoke test
 
-With `make dev` running, migrations applied, and `TYPESAFE_API_KEY` configured, run `pnpm test:systemone`. It upserts a local test user and API key, then sends one live decision request with yes/no, choice, and score questions. Run `pnpm exec tsx --env-file=.env scripts/ensure-test-user.ts` to seed the fixture on its own.
+With `make dev` running, migrations applied, and `TYPESAFE_API_KEY` configured, run `pnpm test:systemone`. It upserts a local test user and API key, then sends one live decision request with yes/no, choice, and score questions. Run `pnpm run script scripts/ensure-test-user.ts` to seed the fixture on its own.
 
 ## Background jobs
 
