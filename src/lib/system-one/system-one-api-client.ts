@@ -1,66 +1,21 @@
 import "@tanstack/react-start/server-only";
 import { ORPCError } from "@orpc/server";
 import { z } from "zod";
+import type { SystemOneRouteBuilder } from "@/server/system-one/router";
+import { systemOneRoutes } from "./routes";
 import {
   badRequest,
-  type decisionInput,
+  type DecisionInputBody,
+  decisionInput,
+  decisionRequestBody,
+  imagesHeader,
+  longContextHeader,
   modelList,
-  multipartRequest,
+  parseSystemOneMultipartRequest,
   systemOneResponse,
-  type upload,
+  typesafeErrors,
   validationError,
 } from "./schemas";
-
-async function parseMultipart(
-  input: z.output<typeof upload>,
-): Promise<FormData> {
-  const { request, ...files } = input;
-  const json = typeof request === "string" ? request : await request.text();
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(json);
-  } catch {
-    throw new ORPCError("BAD_REQUEST", {
-      data: { detail: "The request part must contain JSON." },
-    });
-  }
-  const result = multipartRequest.safeParse(parsed);
-  if (!result.success) {
-    throw new ORPCError("BAD_REQUEST", {
-      data: {
-        detail: "The request part must match the System One request schema.",
-      },
-    });
-  }
-
-  const parts = new Set(Object.keys(files));
-  for (const asset of Object.values(result.data.assets ?? {})) {
-    if ("part" in asset && !parts.delete(asset.part)) {
-      throw new ORPCError("BAD_REQUEST", {
-        data: {
-          detail:
-            "Each image asset part must reference a unique uploaded file.",
-        },
-      });
-    }
-  }
-  if (parts.size > 0) {
-    throw new ORPCError("BAD_REQUEST", {
-      data: {
-        detail: "Every uploaded file must be referenced by an image asset.",
-      },
-    });
-  }
-
-  const form = new FormData();
-  form.set(
-    "request",
-    new Blob([JSON.stringify(result.data)], { type: "application/json" }),
-    "request.json",
-  );
-  for (const [name, file] of Object.entries(files)) form.set(name, file);
-  return form;
-}
 
 const typesafeEnv = z.object({
   TYPESAFE_BASE_URL: z
@@ -69,35 +24,34 @@ const typesafeEnv = z.object({
   TYPESAFE_API_KEY: z.string().trim().min(1),
 });
 
-export const typesafeErrors = {
-  BAD_REQUEST: { data: badRequest },
-  UNPROCESSABLE_CONTENT: { data: validationError },
-  TOO_MANY_REQUESTS: { message: "TypeSafe rate limit reached" },
-  BAD_GATEWAY: { message: "TypeSafe returned an unexpected response" },
-  SERVICE_UNAVAILABLE: { message: "TypeSafe credentials are not configured" },
-};
-
-async function typesafeRequest<T extends z.ZodType>(
-  path: "v1/models" | "v1/systemone",
-  schema: T,
-  options: RequestInit,
-): Promise<z.output<T>> {
+function getTypeSafeBaseUrlAndApiKey() {
   const env = typesafeEnv.safeParse(process.env);
   if (!env.success)
     throw new ORPCError("SERVICE_UNAVAILABLE", {
       message: typesafeErrors.SERVICE_UNAVAILABLE.message,
     });
 
-  const base = env.data.TYPESAFE_BASE_URL;
+  return {
+    baseUrl: env.data.TYPESAFE_BASE_URL,
+    apiKey: env.data.TYPESAFE_API_KEY,
+  };
+}
+
+async function typesafeRequest<T extends z.ZodType>(
+  path: "v1/models" | "v1/systemone",
+  schema: T,
+  options: RequestInit,
+): Promise<z.output<T>> {
+  const { baseUrl, apiKey } = getTypeSafeBaseUrlAndApiKey();
   const headers = new Headers(options.headers);
-  headers.set("Authorization", `Bearer ${env.data.TYPESAFE_API_KEY}`);
+  headers.set("Authorization", `Bearer ${apiKey}`);
   headers.set("Accept", "application/json");
 
   let response: Response;
   let data: unknown;
   try {
     response = await fetch(
-      new URL(path, base.endsWith("/") ? base : `${base}/`),
+      new URL(path, baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`),
       {
         ...options,
         headers,
@@ -141,21 +95,47 @@ export function listModels() {
   return typesafeRequest("v1/models", modelList, { method: "GET" });
 }
 
-export async function runDecision({
-  headers: options,
-  body: input,
-}: z.output<typeof decisionInput>) {
+export async function runDecision(
+  input: DecisionInputBody,
+  {
+    enableImages = false,
+    enableLongContext = false,
+  }: {
+    enableImages?: boolean;
+    enableLongContext?: boolean;
+  } = {},
+) {
   const headers = new Headers();
-  for (const [name, value] of Object.entries(options)) {
-    if (value) headers.set(name, value);
-  }
+  if (enableImages) headers.set(imagesHeader, "true");
+  if (enableLongContext) headers.set(longContextHeader, "true");
 
   const body =
-    "request" in input ? await parseMultipart(input) : JSON.stringify(input);
+    "request" in input
+      ? await parseSystemOneMultipartRequest(input)
+      : JSON.stringify(input);
   if (typeof body === "string") headers.set("Content-Type", "application/json");
   return typesafeRequest("v1/systemone", systemOneResponse, {
     method: "POST",
     headers,
     body,
   });
+}
+
+export function createDecisionRoute(route: SystemOneRouteBuilder) {
+  return route({
+    ...systemOneRoutes.decide,
+    summary: "Evaluate content with System One",
+    description:
+      "Ask named yes/no, choice, score, or box questions about shared content. Mix question types in one request. Requires an API key created in OfElectricSheep.",
+    inputStructure: "detailed",
+    requestBody: decisionRequestBody,
+  })
+    .input(decisionInput)
+    .output(systemOneResponse)
+    .handler(({ input: { body, headers } }) =>
+      runDecision(body, {
+        enableImages: headers[imagesHeader] === "true",
+        enableLongContext: headers[longContextHeader] === "true",
+      }),
+    );
 }

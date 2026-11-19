@@ -1,16 +1,10 @@
 import "@tanstack/react-start/server-only";
 import { type AnyProcedure, os } from "@orpc/server";
 import { systemOneRoutes } from "@/lib/system-one/routes";
+import { modelList, typesafeErrors } from "@/lib/system-one/schemas";
 import {
-  decisionInput,
-  decisionRequestBody,
-  modelList,
-  systemOneResponse,
-} from "@/lib/system-one/schemas";
-import {
+  createDecisionRoute,
   listModels,
-  runDecision,
-  typesafeErrors,
 } from "@/lib/system-one/system-one-api-client";
 import { findApiKeyUser } from "../api-keys";
 import type { User } from "../auth";
@@ -35,6 +29,8 @@ const route = routeGroup(os.$context<{ user: User }>(), {
   security: [{ ApiKey: [] }],
 });
 
+export type SystemOneRouteBuilder = typeof route;
+
 export const systemOneRouter = apiKeyAuth.router({
   models: route({
     ...systemOneRoutes.models,
@@ -45,15 +41,5 @@ export const systemOneRouter = apiKeyAuth.router({
     .output(modelList)
     .handler(listModels),
 
-  decide: route({
-    ...systemOneRoutes.decide,
-    summary: "Evaluate content with System One",
-    description:
-      "Ask named yes/no, choice, score, or box questions about shared content. Mix question types in one request. Requires an API key created in OfElectricSheep.",
-    inputStructure: "detailed",
-    requestBody: decisionRequestBody,
-  })
-    .input(decisionInput)
-    .output(systemOneResponse)
-    .handler(({ input }) => runDecision(input)),
+  decide: createDecisionRoute(route),
 } satisfies Record<keyof typeof systemOneRoutes, AnyProcedure>);

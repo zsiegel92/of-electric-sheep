@@ -7,8 +7,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import {
   answer,
   modelList,
-  multipartRequest,
   question,
+  systemOneMultipartRequestSchema,
   systemOneRequest,
   systemOneResponse,
   upload,
@@ -35,7 +35,10 @@ const specOptions = {
   commonSchemas: {
     SystemOneUpload: { schema: upload, strategy: "input" },
     SystemOneRequest: { schema: systemOneRequest, strategy: "input" },
-    SystemOneMultipartRequest: { schema: multipartRequest, strategy: "input" },
+    SystemOneMultipartRequest: {
+      schema: systemOneMultipartRequestSchema,
+      strategy: "input",
+    },
     SystemOneResponse: { schema: systemOneResponse, strategy: "output" },
     SystemOneQuestion: { schema: question, strategy: "input" },
     SystemOneAnswer: { schema: answer, strategy: "output" },

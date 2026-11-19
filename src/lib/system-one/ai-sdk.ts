@@ -78,5 +78,6 @@ export function toSystemOneResponse(result: DecisionResult): SystemOneResponse {
 export async function decideWithAiSdk(
   options: DecisionOptions,
 ): Promise<SystemOneResponse> {
-  return toSystemOneResponse(await experimental_decide(options));
+  const response = await experimental_decide(options);
+  return toSystemOneResponse(response);
 }

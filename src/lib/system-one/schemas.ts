@@ -1,3 +1,4 @@
+import { ORPCError } from "@orpc/server";
 import { JSON_SCHEMA_REGISTRY } from "@orpc/zod/zod4";
 import type {
   Experimental_DecisionAnswer,
@@ -145,7 +146,7 @@ export const systemOneRequest = z.object({
   ).optional(),
 });
 
-export const multipartRequest = systemOneRequest.extend({
+export const systemOneMultipartRequestSchema = systemOneRequest.extend({
   assets: namedEntries(
     z.union([
       z.object({
@@ -197,6 +198,14 @@ export const validationError = z.object({
     }),
   ),
 });
+
+export const typesafeErrors = {
+  BAD_REQUEST: { data: badRequest },
+  UNPROCESSABLE_CONTENT: { data: validationError },
+  TOO_MANY_REQUESTS: { message: "TypeSafe rate limit reached" },
+  BAD_GATEWAY: { message: "TypeSafe returned an unexpected response" },
+  SERVICE_UNAVAILABLE: { message: "TypeSafe credentials are not configured" },
+};
 
 const state =
   "The parcel arrived two days late, but the customer is satisfied with the replacement.";
@@ -276,8 +285,59 @@ JSON_SCHEMA_REGISTRY.add(requestPart, {
 JSON_SCHEMA_REGISTRY.add(imagePart, { type: "string", format: "binary" });
 export const upload = z.object({ request: requestPart }).catchall(imagePart);
 
-const imagesHeader = "typesafe-danger-zone-images";
-const longContextHeader = "typesafe-danger-zone-long-context";
+export async function parseSystemOneMultipartRequest(
+  input: z.output<typeof upload>,
+): Promise<FormData> {
+  const { request, ...files } = input;
+  const json = typeof request === "string" ? request : await request.text();
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    throw new ORPCError("BAD_REQUEST", {
+      data: { detail: "The request part must contain JSON." },
+    });
+  }
+  const result = systemOneMultipartRequestSchema.safeParse(parsed);
+  if (!result.success) {
+    throw new ORPCError("BAD_REQUEST", {
+      data: {
+        detail: "The request part must match the System One request schema.",
+      },
+    });
+  }
+
+  const parts = new Set(Object.keys(files));
+  for (const asset of Object.values(result.data.assets ?? {})) {
+    if ("part" in asset && !parts.delete(asset.part)) {
+      throw new ORPCError("BAD_REQUEST", {
+        data: {
+          detail:
+            "Each image asset part must reference a unique uploaded file.",
+        },
+      });
+    }
+  }
+  if (parts.size > 0) {
+    throw new ORPCError("BAD_REQUEST", {
+      data: {
+        detail: "Every uploaded file must be referenced by an image asset.",
+      },
+    });
+  }
+
+  const form = new FormData();
+  form.set(
+    "request",
+    new Blob([JSON.stringify(result.data)], { type: "application/json" }),
+    "request.json",
+  );
+  for (const [name, file] of Object.entries(files)) form.set(name, file);
+  return form;
+}
+
+export const imagesHeader = "typesafe-danger-zone-images";
+export const longContextHeader = "typesafe-danger-zone-long-context";
 const headersSchema = z.object({
   [imagesHeader]: z
     .literal("true")
@@ -289,9 +349,12 @@ const headersSchema = z.object({
     .describe("Enable long context."),
 });
 
+export const decisionInputBody = z.union([systemOneRequest, upload]);
+export type DecisionInputBody = z.output<typeof decisionInputBody>;
+
 export const decisionInput = z.object({
   headers: headersSchema,
-  body: z.union([systemOneRequest, upload]),
+  body: decisionInputBody,
 });
 
 export const decisionRequestBody = {
