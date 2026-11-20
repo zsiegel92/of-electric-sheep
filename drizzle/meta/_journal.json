@@ -36,6 +36,13 @@
       "when": 1795215165379,
       "tag": "0004_immutable-pipeline-definitions",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1795216766775,
+      "tag": "0005_single-pipeline-group-pointer",
+      "breakpoints": true
     }
   ]
 }

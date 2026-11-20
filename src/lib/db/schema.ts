@@ -1,4 +1,3 @@
-import { sql } from "drizzle-orm";
 import {
   foreignKey,
   index,
@@ -47,10 +46,6 @@ export const decisionPipelines = pgTable(
       .references(() => users.githubId, { onDelete: "cascade" }),
     definitionHash: text("definition_hash").notNull(),
     primaryGroupedPipelineId: uuid("primary_grouped_pipeline_id").notNull(),
-    // Only self-pointing rows can be targets of the group foreign key.
-    canonicalPipelineId: uuid("canonical_pipeline_id").generatedAlwaysAs(
-      sql`case when "id" = "primary_grouped_pipeline_id" then "id" end`,
-    ),
     baseUrl: text("base_url"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -61,14 +56,20 @@ export const decisionPipelines = pgTable(
       table.userId,
       table.definitionHash,
     ),
-    unique("decision_pipelines_user_canonical_pipeline_id_key").on(
+    unique("decision_pipelines_user_id_primary_group_key").on(
       table.userId,
-      table.canonicalPipelineId,
+      table.id,
+      table.primaryGroupedPipelineId,
     ),
     foreignKey({
       name: "decision_pipelines_primary_grouped_pipeline_fk",
-      columns: [table.userId, table.primaryGroupedPipelineId],
-      foreignColumns: [table.userId, table.canonicalPipelineId],
+      // The target's ID and its pointer must both match this row's pointer.
+      columns: [
+        table.userId,
+        table.primaryGroupedPipelineId,
+        table.primaryGroupedPipelineId,
+      ],
+      foreignColumns: [table.userId, table.id, table.primaryGroupedPipelineId],
     }),
   ],
 );
