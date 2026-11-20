@@ -1,10 +1,11 @@
 // processDecision integration: real Postgres and SDK HTTP, fake TypeSafe, stubbed Inngest.
-// Does not exercise API routes, authentication, or the Inngest worker runtime.
+// Does not exercise API routes or authentication.
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import { test } from "node:test";
 import { eq, inArray } from "drizzle-orm";
+import { saveUser } from "../src/lib/api-keys/queries";
 import type { User } from "../src/lib/auth";
 import { getDb } from "../src/lib/db/db";
 import { decisionPipelines, users } from "../src/lib/db/schema";
@@ -90,8 +91,8 @@ await test("decision processing integration", async (t) => {
   process.env["LANGFUSE_PUBLIC_KEY"] = "";
   process.env["LANGFUSE_SECRET_KEY"] = "";
   const { processDecision } = await import("../src/lib/decisions/decide");
-  t.mock.method(inngest, "send", async (event: UsageEvent) => {
-    events.push(event);
+  t.mock.method(inngest, "send", async (event: UsageEvent | UsageEvent[]) => {
+    events.push(...(Array.isArray(event) ? event : [event]));
     return { ids: [randomUUID()] };
   });
   t.beforeEach(() => {
@@ -106,11 +107,16 @@ await test("decision processing integration", async (t) => {
           .select()
           .from(decisionPipelines)
           .where(eq(decisionPipelines.userId, user.githubId));
+      const registerUser = async () => {
+        const user = newUser();
+        await saveUser(user, db);
+        return user;
+      };
       try {
         await t.test(
           "a new decision uses the default upstream and publishes a creation event",
           async () => {
-            const user = newUser();
+            const user = await registerUser();
             const result = await processDecision(input, user);
             assert.equal(result.model, "test-model");
             assert.deepEqual(calls, [
@@ -120,24 +126,60 @@ await test("decision processing integration", async (t) => {
                 authorization: "Bearer local-decision-test-key",
               },
             ]);
-            assert.equal(events.length, 1);
-            assert.equal(events[0]?.name, newPipelineUsed.name);
-            assert.deepEqual(events[0]?.data, {
+            assert.equal(events.length, 2);
+            const creation = events[0];
+            assert.ok(creation);
+            assert.equal(creation.name, newPipelineUsed.name);
+            assert.equal(events[1]?.name, pipelineUsed.name);
+            assert.deepEqual(events[1]?.data, creation.data);
+            assert.deepEqual(creation.data, {
+              pipelineId: creation.data.pipelineId,
               user,
               definition,
               state: input.state,
             });
-            // The worker is not running in this test; publication alone creates no row.
-            assert.equal((await rowsFor(user)).length, 0);
+            assert.equal((await rowsFor(user)).length, 1);
+            assert.equal(
+              (await rowsFor(user))[0]?.id,
+              creation.data.pipelineId,
+            );
           },
         );
 
         await t.test(
-          "the persistence step tolerates concurrent retries without resetting an endpoint",
+          "concurrent first uses receive the UUID stored by the upsert",
           async () => {
-            const user = newUser();
-            // Call the worker's database operation directly, not its Inngest handler.
-            await Promise.all(
+            const user = await registerUser();
+            await Promise.all([
+              processDecision(input, user),
+              processDecision({ ...input, state: "Concurrent input" }, user),
+            ]);
+            const creations = events.filter(
+              (event) => event.name === newPipelineUsed.name,
+            );
+            assert.equal(creations.length, 1);
+            assert.equal(
+              events.filter((event) => event.name === pipelineUsed.name).length,
+              2,
+            );
+            const pipelineId = creations[0]?.data.pipelineId;
+            assert.ok(pipelineId);
+            assert.ok(
+              events.every((event) => event.data.pipelineId === pipelineId),
+            );
+            assert.equal((await rowsFor(user)).length, 1);
+            assert.equal((await rowsFor(user))[0]?.id, pipelineId);
+            await processDecision(input, user);
+            assert.equal(events.at(-1)?.name, pipelineUsed.name);
+            assert.equal(events.at(-1)?.data.pipelineId, pipelineId);
+          },
+        );
+
+        await t.test(
+          "concurrent upserts return one stored pipeline and one creation result",
+          async () => {
+            const user = await registerUser();
+            const results = await Promise.all(
               Array.from({ length: 4 }, () =>
                 ensureDecisionPipeline(user, definition),
               ),
@@ -145,22 +187,29 @@ await test("decision processing integration", async (t) => {
             const [pipeline] = await rowsFor(user);
             assert.ok(pipeline);
             assert.equal((await rowsFor(user)).length, 1);
+            assert.ok(
+              results.every((result) => result.pipeline.id === pipeline.id),
+            );
+            assert.equal(
+              results.filter((result) => result.wasCreated).length,
+              1,
+            );
             await db
               .update(decisionPipelines)
               .set({ baseUrl: `${baseUrl}/custom` })
               .where(eq(decisionPipelines.id, pipeline.id));
-            await ensureDecisionPipeline(user, definition);
-            assert.equal(
-              (await rowsFor(user))[0]?.baseUrl,
-              `${baseUrl}/custom`,
-            );
+            const reused = await ensureDecisionPipeline(user, definition);
+            assert.deepEqual(reused, {
+              pipeline: { id: pipeline.id, baseUrl: `${baseUrl}/custom` },
+              wasCreated: false,
+            });
           },
         );
 
         await t.test(
           "an existing pipeline is reused for different state and reordered question keys",
           async () => {
-            const user = newUser();
+            const user = await registerUser();
             await ensureDecisionPipeline(user, definition);
             const [pipeline] = await rowsFor(user);
             assert.ok(pipeline);
@@ -194,7 +243,7 @@ await test("decision processing integration", async (t) => {
         await t.test(
           "model, capability, and ordered rubric changes select a new pipeline",
           async () => {
-            const user = newUser();
+            const user = await registerUser();
             await ensureDecisionPipeline(user, definition);
             await processDecision({ ...input, model: "other-model" }, user);
             await processDecision(input, user, { enableImages: true });
@@ -208,9 +257,15 @@ await test("decision processing integration", async (t) => {
               },
               user,
             );
-            assert.equal(events.length, 3);
-            assert.ok(
-              events.every((event) => event.name === newPipelineUsed.name),
+            assert.equal(events.length, 6);
+            assert.equal(
+              events.filter((event) => event.name === newPipelineUsed.name)
+                .length,
+              3,
+            );
+            assert.equal(
+              events.filter((event) => event.name === pipelineUsed.name).length,
+              3,
             );
           },
         );
@@ -218,8 +273,8 @@ await test("decision processing integration", async (t) => {
         await t.test(
           "a custom endpoint is used only for its owner's pipeline",
           async () => {
-            const owner = newUser();
-            const other = newUser();
+            const owner = await registerUser();
+            const other = await registerUser();
             await ensureDecisionPipeline(owner, definition);
             const [pipeline] = await rowsFor(owner);
             assert.ok(pipeline);
@@ -241,11 +296,15 @@ await test("decision processing integration", async (t) => {
               state: input.state,
             });
             assert.equal(events[1]?.name, newPipelineUsed.name);
+            assert.equal(events[2]?.name, pipelineUsed.name);
             assert.deepEqual(events[1]?.data.user, other);
+            const newPipelineId = events[1]?.data.pipelineId;
+            assert.ok(newPipelineId);
             await ensureDecisionPipeline(other, definition);
             const [otherPipeline] = await rowsFor(other);
             assert.ok(otherPipeline);
             assert.notEqual(otherPipeline.id, pipeline.id);
+            assert.equal(otherPipeline.id, newPipelineId);
             assert.equal(otherPipeline.baseUrl, null);
           },
         );

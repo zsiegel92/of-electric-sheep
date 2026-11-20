@@ -33,9 +33,9 @@ Ctrl-C stops the app and Inngest. `make db-stop` stops Postgres.
 - `src/server/`: routes and server functions.
 - `src/lib/inngest/functions/`: background jobs, registered in `src/routes/api.inngest.ts`.
 
-Create an API key in the app and send it as `X-API-Key` to call System One. Decisions reuse per-user pipelines, which can point to a custom TypeSafe endpoint. Inngest creates new pipelines and receives usage events.
+Create an API key in the app and send it as `X-API-Key` to call System One. Decisions reuse per-user pipelines, which can point to a custom TypeSafe endpoint. Pipeline rows are created on first use; Inngest receives creation and usage events.
 
-Optional Langfuse tracing uses `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and `LANGFUSE_BASE_URL`.
+Optional Langfuse tracing uses `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and `LANGFUSE_BASE_URL`. Traces include full requests, image attachments, decisions, and token usage. Fetch recent pipeline spans with `pnpm run script scripts/tail-spans-from-pipeline.ts <pipeline-id>`.
 
 ## Checks
 

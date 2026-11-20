@@ -271,6 +271,38 @@ export function toSystemOneRequest({
   };
 }
 
+// Data URIs let Langfuse retain image bytes as media attachments instead of File/Image placeholders.
+export async function toSystemOneTraceInput({
+  assets,
+  questionParts: _questionParts,
+  ...request
+}: SystemOneCoreIngredients) {
+  return {
+    ...request,
+    ...(assets && {
+      assets: Object.fromEntries(
+        await Promise.all(
+          Object.entries(assets).map(async ([name, asset]) => {
+            if (!(asset instanceof File)) {
+              const mime = asset.format === "png" ? "image/png" : "image/jpeg";
+              return [name, `data:${mime};base64,${asset.data_base64}`];
+            }
+            const bytes = Buffer.from(await asset.arrayBuffer());
+            const mime = bytes
+              .subarray(0, 8)
+              .equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+              ? "image/png"
+              : bytes[0] === 0xff && bytes[1] === 0xd8
+                ? "image/jpeg"
+                : asset.type || "application/octet-stream";
+            return [name, `data:${mime};base64,${bytes.toString("base64")}`];
+          }),
+        ),
+      ),
+    }),
+  };
+}
+
 export const decisionInput = z.object({
   headers: headersSchema,
   body: decisionInputBody,

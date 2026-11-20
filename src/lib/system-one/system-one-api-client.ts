@@ -8,7 +8,6 @@ import {
   TypeSafeError,
 } from "@typesafe-ai/sdk";
 import { z } from "zod";
-import { traceGeneration } from "@/lib/langfuse";
 import {
   badRequest,
   type SystemOneCoreIngredients,
@@ -95,40 +94,30 @@ export async function runDecision(
   ingredients: SystemOneCoreIngredients,
   { baseUrl }: { baseUrl?: string | null } = {},
 ) {
-  return traceGeneration("system-one.decide", async (generation) => {
-    const decision = await typesafeRequest(
-      systemOneResponse,
-      async (client) => {
-        try {
-          return await client.systemOne(
-            toSystemOneRequest(ingredients),
-            ingredients.options,
-          );
-        } catch (error) {
-          if (
-            error instanceof TypeSafeError &&
-            !(
-              error instanceof APIError ||
-              error instanceof APIConnectionError ||
-              error instanceof APIUserAbortError
-            )
-          ) {
-            throw new ORPCError("BAD_REQUEST", {
-              data: { detail: error.message },
-            });
-          }
-          throw error;
+  return typesafeRequest(
+    systemOneResponse,
+    async (client) => {
+      try {
+        return await client.systemOne(
+          toSystemOneRequest(ingredients),
+          ingredients.options,
+        );
+      } catch (error) {
+        if (
+          error instanceof TypeSafeError &&
+          !(
+            error instanceof APIError ||
+            error instanceof APIConnectionError ||
+            error instanceof APIUserAbortError
+          )
+        ) {
+          throw new ORPCError("BAD_REQUEST", {
+            data: { detail: error.message },
+          });
         }
-      },
-      baseUrl,
-    );
-    generation?.update({
-      model: decision.model,
-      usageDetails: {
-        input: decision.usage.input_tokens,
-        output: decision.usage.output_tokens,
-      },
-    });
-    return decision;
-  });
+        throw error;
+      }
+    },
+    baseUrl,
+  );
 }

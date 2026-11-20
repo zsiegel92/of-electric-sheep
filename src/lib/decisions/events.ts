@@ -5,6 +5,7 @@ import { systemOneRequest } from "@/lib/system-one/typesafe-api-schemas";
 import { pipelineDefinitionSchema } from "./pipeline-schemas";
 
 const pipelineUsageSchema = z.object({
+  pipelineId: z.uuid(),
   user: userSchema,
   definition: pipelineDefinitionSchema,
   state: systemOneRequest.shape.state,
@@ -15,5 +16,5 @@ export const newPipelineUsed = eventType("decisions/new-pipeline.used", {
 });
 
 export const pipelineUsed = eventType("decisions/pipeline.used", {
-  schema: pipelineUsageSchema.extend({ pipelineId: z.uuid() }),
+  schema: pipelineUsageSchema,
 });
