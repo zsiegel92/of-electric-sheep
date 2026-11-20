@@ -367,13 +367,17 @@ export const longContextHeader = "typesafe-danger-zone-long-context";
 const headersSchema = z.object({
   [imagesHeader]: z
     .literal("true")
-    .optional()
+    .exactOptional()
     .describe("Enable image assets and box questions."),
   [longContextHeader]: z
     .literal("true")
-    .optional()
+    .exactOptional()
     .describe("Enable long context."),
 });
+
+export type DecisionOptions = {
+  headers: z.output<typeof headersSchema>;
+};
 
 export const decisionInputBody = z.union([systemOneRequest, upload]);
 export type DecisionInputBody = z.output<typeof decisionInputBody>;
