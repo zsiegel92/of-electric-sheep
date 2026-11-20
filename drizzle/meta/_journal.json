@@ -15,6 +15,27 @@
       "when": 1795134903709,
       "tag": "0001_decision-pipelines",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1795183644771,
+      "tag": "0002_stored-decision-pipelines",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1795214944439,
+      "tag": "0003_canonical-pipeline-groups",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1795215165379,
+      "tag": "0004_immutable-pipeline-definitions",
+      "breakpoints": true
     }
   ]
 }

@@ -7,23 +7,29 @@ import {
   type DecisionCapabilities,
   type DecisionInputBody,
   getSystemOneCoreIngredients,
+  imagesHeader,
+  longContextHeader,
   toSystemOneTraceInput,
 } from "@/lib/system-one/type-helpers";
 import { newPipelineUsed, pipelineUsed } from "./events";
 import { pipelineDefinitionSchema } from "./pipeline-schemas";
-import { ensureDecisionPipeline } from "./queries";
+import { ensureDecisionPipeline, findDecisionPipeline } from "./queries";
 
 export async function processDecision(
   input: DecisionInputBody,
   user: User,
   capabilities: DecisionCapabilities = {},
+  selectedPipeline?: {
+    id: string;
+    baseUrl: string | null;
+    hasDefinition: boolean;
+  },
 ): ReturnType<typeof runDecision> {
   const ingredients = await getSystemOneCoreIngredients(input, capabilities);
   const definition = pipelineDefinitionSchema.parse(ingredients);
-  const { pipeline, wasCreated } = await ensureDecisionPipeline(
-    user,
-    definition,
-  );
+  const pipeline =
+    selectedPipeline ??
+    (await ensureDecisionPipeline(user, definition)).pipeline;
 
   // TODO:
   // 2
@@ -46,8 +52,15 @@ export async function processDecision(
         definition,
         state: ingredients.state,
       };
+      // Republish pending definitions with a stable ID so a failed send can be retried.
       await inngest.send([
-        ...(wasCreated ? [newPipelineUsed.create(usage)] : []),
+        ...(!pipeline.hasDefinition
+          ? [
+              newPipelineUsed.create(usage, {
+                id: `new-pipeline-${pipeline.id}`,
+              }),
+            ]
+          : []),
         pipelineUsed.create(usage),
       ]);
       const decision = await runDecision(ingredients, {
@@ -62,5 +75,28 @@ export async function processDecision(
       });
       return decision;
     },
+  );
+}
+
+export async function processStoredDecision(
+  pipelineId: string,
+  state: Parameters<typeof runDecision>[0]["state"],
+  user: User,
+) {
+  const stored = await findDecisionPipeline(user.githubId, pipelineId);
+  if (!stored) return;
+
+  const {
+    pipeline,
+    definition: { model, questions, options },
+  } = stored;
+  return processDecision(
+    { model, questions, state },
+    user,
+    {
+      enableImages: options.headers[imagesHeader] === "true",
+      enableLongContext: options.headers[longContextHeader] === "true",
+    },
+    pipeline,
   );
 }

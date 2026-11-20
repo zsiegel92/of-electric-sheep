@@ -1,8 +1,9 @@
 import "@tanstack/react-start/server-only";
 import { type AnyProcedure, os } from "@orpc/server";
+import { z } from "zod";
 import { findApiKeyUser } from "@/lib/api-keys/queries";
 import type { User } from "@/lib/auth";
-import { processDecision } from "@/lib/decisions/decide";
+import { processDecision, processStoredDecision } from "@/lib/decisions/decide";
 import { listModels } from "@/lib/system-one/system-one-api-client";
 import {
   decisionInput,
@@ -13,6 +14,7 @@ import {
 } from "@/lib/system-one/type-helpers";
 import {
   modelList,
+  systemOneRequest,
   systemOneResponse,
 } from "@/lib/system-one/typesafe-api-schemas";
 import { routeGroup } from "../route-group";
@@ -62,5 +64,24 @@ export const systemOneRouter = apiKeyAuth.router({
         enableImages: headers[imagesHeader] === "true",
         enableLongContext: headers[longContextHeader] === "true",
       }),
+    ),
+
+  decideByPipeline: route({
+    ...systemOneRoutes.decideByPipeline,
+    summary: "Evaluate content using a stored pipeline",
+    description:
+      "Run the primary pipeline's stored questions against new state. Requires an API key that owns the pipeline. Replay accepts state without image attachments.",
+  })
+    .errors({ NOT_FOUND: { message: "Decision pipeline not found" } })
+    .input(
+      z.object({ pipelineId: z.uuid(), state: systemOneRequest.shape.state }),
+    )
+    .output(systemOneResponse)
+    .handler(
+      async ({ input: { pipelineId, state }, context: { user }, errors }) => {
+        const result = await processStoredDecision(pipelineId, state, user);
+        if (!result) throw errors.NOT_FOUND();
+        return result;
+      },
     ),
 } satisfies Record<keyof typeof systemOneRoutes, AnyProcedure>);

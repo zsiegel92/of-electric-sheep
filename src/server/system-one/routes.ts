@@ -7,6 +7,7 @@ type HttpRoute = Required<
 export const systemOneRoutes = {
   models: { method: "GET", path: "/system-one/models" },
   decide: { method: "POST", path: "/system-one" },
+  decideByPipeline: { method: "POST", path: "/system-one/decide-by-pipeline" },
 } as const satisfies Record<string, HttpRoute>;
 
 type SystemOneRoutes = typeof systemOneRoutes;
