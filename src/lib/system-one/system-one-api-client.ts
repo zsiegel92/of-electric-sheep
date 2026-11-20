@@ -11,9 +11,7 @@ import { z } from "zod";
 import { traceGeneration } from "@/lib/langfuse";
 import {
   badRequest,
-  type DecisionCapabilities,
-  type DecisionInputBody,
-  getSystemOneCoreIngredients,
+  type SystemOneCoreIngredients,
   toSystemOneRequest,
   typesafeErrors,
   validationError,
@@ -46,10 +44,11 @@ function getTypeSafeBaseUrlAndApiKey() {
 async function typesafeRequest<T extends z.ZodType>(
   schema: T,
   run: (client: TypeSafeClient) => Promise<unknown>,
+  baseUrl?: string | null,
 ): Promise<z.output<T>> {
-  const { baseUrl, apiKey } = getTypeSafeBaseUrlAndApiKey();
+  const { baseUrl: defaultBaseUrl, apiKey } = getTypeSafeBaseUrlAndApiKey();
   const client = new TypeSafeClient({
-    baseURL: baseUrl,
+    baseURL: baseUrl ?? defaultBaseUrl,
     apiKey,
     timeout: 55_000,
     retry: { maxRetries: 0 },
@@ -93,10 +92,9 @@ export function listModels() {
 }
 
 export async function runDecision(
-  input: DecisionInputBody,
-  capabilities: DecisionCapabilities = {},
+  ingredients: SystemOneCoreIngredients,
+  { baseUrl }: { baseUrl?: string | null } = {},
 ) {
-  const ingredients = await getSystemOneCoreIngredients(input, capabilities);
   return traceGeneration("system-one.decide", async (generation) => {
     const decision = await typesafeRequest(
       systemOneResponse,
@@ -122,6 +120,7 @@ export async function runDecision(
           throw error;
         }
       },
+      baseUrl,
     );
     generation?.update({
       model: decision.model,

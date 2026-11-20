@@ -16,6 +16,7 @@
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "script": "tsx --env-file=.env",
+    "test:integration": "pnpm run script scripts/test-decisions.integration.ts",
     "test:systemone": "pnpm run script scripts/test-systemone-api.ts",
     "dev:web": "INNGEST_DEV=1 node --env-file-if-exists=.env node_modules/vite/bin/vite.js",
     "dev:inngest": "inngest dev --host 127.0.0.1 --no-discovery -u http://localhost:5173/api/inngest"

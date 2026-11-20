@@ -188,9 +188,8 @@ const headersSchema = z.object({
     .describe("Enable long context."),
 });
 
-export type DecisionOptions = {
-  headers: z.output<typeof headersSchema>;
-};
+export const decisionOptionsSchema = z.object({ headers: headersSchema });
+export type DecisionOptions = z.output<typeof decisionOptionsSchema>;
 
 export const decisionInputBody = z.union([systemOneRequest, upload]);
 export type DecisionInputBody = z.output<typeof decisionInputBody>;

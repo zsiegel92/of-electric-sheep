@@ -57,8 +57,8 @@ export const systemOneRouter = apiKeyAuth.router({
   })
     .input(decisionInput)
     .output(systemOneResponse)
-    .handler(({ input: { body, headers } }) =>
-      processDecision(body, {
+    .handler(({ input: { body, headers }, context: { user } }) =>
+      processDecision(body, user, {
         enableImages: headers[imagesHeader] === "true",
         enableLongContext: headers[longContextHeader] === "true",
       }),
