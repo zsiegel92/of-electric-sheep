@@ -2,19 +2,19 @@ import "@tanstack/react-start/server-only";
 import { type AnyProcedure, os } from "@orpc/server";
 import { findApiKeyUser } from "@/lib/api-keys/queries";
 import type { User } from "@/lib/auth";
+import { processDecision } from "@/lib/decisions/decide";
+import { listModels } from "@/lib/system-one/system-one-api-client";
 import {
   decisionInput,
   decisionRequestBody,
   imagesHeader,
   longContextHeader,
+  typesafeErrors,
+} from "@/lib/system-one/type-helpers";
+import {
   modelList,
   systemOneResponse,
-  typesafeErrors,
-} from "@/lib/system-one/schemas";
-import {
-  listModels,
-  runDecision,
-} from "@/lib/system-one/system-one-api-client";
+} from "@/lib/system-one/typesafe-api-schemas";
 import { routeGroup } from "../route-group";
 import { systemOneRoutes } from "./routes";
 
@@ -58,7 +58,7 @@ export const systemOneRouter = apiKeyAuth.router({
     .input(decisionInput)
     .output(systemOneResponse)
     .handler(({ input: { body, headers } }) =>
-      runDecision(body, {
+      processDecision(body, {
         enableImages: headers[imagesHeader] === "true",
         enableLongContext: headers[longContextHeader] === "true",
       }),

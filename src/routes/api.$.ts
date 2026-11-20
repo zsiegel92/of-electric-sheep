@@ -9,14 +9,14 @@ import { ZodToJsonSchemaConverter } from "@orpc/zod/zod4";
 import { createFileRoute } from "@tanstack/react-router";
 import { apiKeyHeader } from "@/lib/api-keys/schemas";
 import type { User } from "../lib/auth";
+import { systemOneMultipartRequestSchema } from "../lib/system-one/type-helpers";
 import {
   answer,
   modelList,
   question,
-  systemOneMultipartRequestSchema,
   systemOneRequest,
   systemOneResponse,
-} from "../lib/system-one/schemas";
+} from "../lib/system-one/typesafe-api-schemas";
 import { apiKeysTag, keyManagementRouter } from "../server/api-keys";
 import { systemOneRouter, systemOneTag } from "../server/system-one/router";
 
