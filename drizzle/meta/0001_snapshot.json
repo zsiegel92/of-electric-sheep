@@ -1,6 +1,6 @@
 {
-  "id": "578bc5df-cb27-4357-aec1-e5afa1dbfc9f",
-  "prevId": "59bfa4b4-de1a-45d7-805e-9ce8c7dcc083",
+  "id": "6d743bf6-a8de-45a0-9076-7e2517765757",
+  "prevId": "ee61d539-d8c4-4c3c-b5b3-75865db2f936",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -93,6 +93,136 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.decision_pipeline_definitions": {
+      "name": "decision_pipeline_definitions",
+      "schema": "",
+      "columns": {
+        "pipeline_id": {
+          "name": "pipeline_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "model": {
+          "name": "model",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "options": {
+          "name": "options",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "decision_pipeline_definitions_pipeline_id_decision_pipelines_id_fk": {
+          "name": "decision_pipeline_definitions_pipeline_id_decision_pipelines_id_fk",
+          "tableFrom": "decision_pipeline_definitions",
+          "tableTo": "decision_pipelines",
+          "columnsFrom": [
+            "pipeline_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.decision_pipeline_questions": {
+      "name": "decision_pipeline_questions",
+      "schema": "",
+      "columns": {
+        "pipeline_id": {
+          "name": "pipeline_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "system_prompt": {
+          "name": "system_prompt",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "criteria": {
+          "name": "criteria",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "answer_shape": {
+          "name": "answer_shape",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "generated": {
+            "as": "public.system_one_answer_shape(\"type\", \"criteria\")",
+            "type": "stored"
+          }
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "decision_pipeline_questions_pipeline_id_decision_pipeline_definitions_pipeline_id_fk": {
+          "name": "decision_pipeline_questions_pipeline_id_decision_pipeline_definitions_pipeline_id_fk",
+          "tableFrom": "decision_pipeline_questions",
+          "tableTo": "decision_pipeline_definitions",
+          "columnsFrom": [
+            "pipeline_id"
+          ],
+          "columnsTo": [
+            "pipeline_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "decision_pipeline_questions_pipeline_id_name_pk": {
+          "name": "decision_pipeline_questions_pipeline_id_name_pk",
+          "columns": [
+            "pipeline_id",
+            "name"
+          ]
+        }
+      },
+      "uniqueConstraints": {
+        "decision_question_answer_shape_key": {
+          "name": "decision_question_answer_shape_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "pipeline_id",
+            "name",
+            "answer_shape"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.decision_pipelines": {
       "name": "decision_pipelines",
       "schema": "",
@@ -116,11 +246,24 @@
           "primaryKey": false,
           "notNull": true
         },
-        "definition": {
-          "name": "definition",
-          "type": "jsonb",
+        "primary_grouped_pipeline_id": {
+          "name": "primary_grouped_pipeline_id",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": true
+        },
+        "display_name": {
+          "name": "display_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ui_ignored": {
+          "name": "ui_ignored",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "base_url": {
           "name": "base_url",
@@ -172,12 +315,162 @@
           ],
           "onDelete": "cascade",
           "onUpdate": "no action"
+        },
+        "decision_pipelines_primary_grouped_pipeline_fk": {
+          "name": "decision_pipelines_primary_grouped_pipeline_fk",
+          "tableFrom": "decision_pipelines",
+          "tableTo": "decision_pipelines",
+          "columnsFrom": [
+            "user_id",
+            "primary_grouped_pipeline_id",
+            "primary_grouped_pipeline_id"
+          ],
+          "columnsTo": [
+            "user_id",
+            "id",
+            "primary_grouped_pipeline_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "decision_pipelines_user_id_primary_group_key": {
+          "name": "decision_pipelines_user_id_primary_group_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "user_id",
+            "id",
+            "primary_grouped_pipeline_id"
+          ]
+        }
+      },
       "policies": {},
       "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.decision_question_links": {
+      "name": "decision_question_links",
+      "schema": "",
+      "columns": {
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "pipeline_id": {
+          "name": "pipeline_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "primary_pipeline_id": {
+          "name": "primary_pipeline_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "primary_name": {
+          "name": "primary_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "answer_shape": {
+          "name": "answer_shape",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "decision_question_links_group_fk": {
+          "name": "decision_question_links_group_fk",
+          "tableFrom": "decision_question_links",
+          "tableTo": "decision_pipelines",
+          "columnsFrom": [
+            "user_id",
+            "pipeline_id",
+            "primary_pipeline_id"
+          ],
+          "columnsTo": [
+            "user_id",
+            "id",
+            "primary_grouped_pipeline_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "decision_question_links_question_fk": {
+          "name": "decision_question_links_question_fk",
+          "tableFrom": "decision_question_links",
+          "tableTo": "decision_pipeline_questions",
+          "columnsFrom": [
+            "pipeline_id",
+            "name",
+            "answer_shape"
+          ],
+          "columnsTo": [
+            "pipeline_id",
+            "name",
+            "answer_shape"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "decision_question_links_primary_question_fk": {
+          "name": "decision_question_links_primary_question_fk",
+          "tableFrom": "decision_question_links",
+          "tableTo": "decision_pipeline_questions",
+          "columnsFrom": [
+            "primary_pipeline_id",
+            "primary_name",
+            "answer_shape"
+          ],
+          "columnsTo": [
+            "pipeline_id",
+            "name",
+            "answer_shape"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "decision_question_links_pipeline_id_name_pk": {
+          "name": "decision_question_links_pipeline_id_name_pk",
+          "columns": [
+            "pipeline_id",
+            "name"
+          ]
+        }
+      },
+      "uniqueConstraints": {
+        "decision_question_links_primary_name_key": {
+          "name": "decision_question_links_primary_name_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "pipeline_id",
+            "primary_name"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "decision_question_links_non_primary": {
+          "name": "decision_question_links_non_primary",
+          "value": "\"decision_question_links\".\"pipeline_id\" <> \"decision_question_links\".\"primary_pipeline_id\""
+        }
+      },
       "isRLSEnabled": false
     },
     "public.users": {

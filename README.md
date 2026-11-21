@@ -49,6 +49,8 @@ pnpm test:systemone
 
 After schema changes, use `make db-generate` and `make db-migrate`. `make db-studio` opens Drizzle Studio.
 
+The database baseline is in `drizzle/0000_initial.sql`. `drizzle/0001_pipeline-invariants.sql` adds the answer-shape function, deferred constraints, and triggers that enforce pipeline immutability and complete question links. If your local database used the earlier migration history, point `DATABASE_URL` at a fresh database before running `make db-migrate`.
+
 ## Deploy
 
 Build with `make build`; run with `make start`. Configure the variables in `.env.example`, apply migrations, and set `APP_URL` and the GitHub callback URL for your domain. Register `/api/inngest` with Inngest.

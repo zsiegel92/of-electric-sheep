@@ -5,71 +5,15 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1795110711673,
+      "when": 1795302780178,
       "tag": "0000_initial",
       "breakpoints": true
     },
     {
       "idx": 1,
       "version": "7",
-      "when": 1795134903709,
-      "tag": "0001_decision-pipelines",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1795183644771,
-      "tag": "0002_stored-decision-pipelines",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1795214944439,
-      "tag": "0003_canonical-pipeline-groups",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1795215165379,
-      "tag": "0004_immutable-pipeline-definitions",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1795216766775,
-      "tag": "0005_single-pipeline-group-pointer",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "7",
-      "when": 1795217465076,
-      "tag": "0006_pipeline-question-links",
-      "breakpoints": true
-    },
-    {
-      "idx": 7,
-      "version": "7",
-      "when": 1795276966491,
-      "tag": "0007_pipeline-display-settings",
-      "breakpoints": true
-    },
-    {
-      "idx": 8,
-      "version": "7",
-      "when": 1795298978550,
-      "tag": "0008_evolve-pipeline-versions",
-      "breakpoints": true
-    },
-    {
-      "idx": 9,
-      "version": "7",
-      "when": 1795302531602,
-      "tag": "0009_remove-pipeline-request-flag",
+      "when": 1795302785111,
+      "tag": "0001_pipeline-invariants",
       "breakpoints": true
     }
   ]

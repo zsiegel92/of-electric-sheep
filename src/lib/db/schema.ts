@@ -95,7 +95,7 @@ export const decisionPipelineQuestions = pgTable(
   {
     pipelineId: uuid("pipeline_id")
       .notNull()
-      // Migration 0004 defers this FK so question rows can be inserted before the definition.
+      // The pipeline invariants migration defers this FK so questions can be inserted first.
       .references(() => decisionPipelineDefinitions.pipelineId, {
         onDelete: "cascade",
       }),
