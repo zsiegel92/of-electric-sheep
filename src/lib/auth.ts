@@ -21,6 +21,7 @@ export const userSchema = z.object({
 export type User = z.infer<typeof userSchema>;
 
 const githubProfile = z.object({ id: z.int().positive() });
+const sessionLifetimeSeconds = 14 * 24 * 60 * 60;
 
 function createAuth() {
   const env = envSchema.parse(process.env);
@@ -33,10 +34,10 @@ function createAuth() {
     },
     account: { storeStateStrategy: "cookie", storeAccountCookie: false },
     session: {
-      expiresIn: 3600,
+      expiresIn: sessionLifetimeSeconds,
       cookieCache: {
         enabled: true,
-        maxAge: 3600,
+        maxAge: sessionLifetimeSeconds,
         strategy: "jwt",
         refreshCache: false,
       },
