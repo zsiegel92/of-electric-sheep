@@ -1,21 +1,17 @@
 import { createHash } from "node:crypto";
+import { canonicalize } from "./pipeline-draft";
 import type { PipelineDefinition } from "./pipeline-schemas";
 
-function canonicalize(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonicalize);
-  if (value !== null && typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value)
-        .filter(([, entry]) => entry !== undefined)
-        .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
-        .map(([key, entry]) => [key, canonicalize(entry)]),
-    );
-  }
-  return value;
-}
-
-export function hashPipelineDefinition(definition: PipelineDefinition): string {
-  return createHash("sha256")
+export function hashPipelineDefinition(
+  definition: PipelineDefinition,
+  baseUrl?: string | null,
+): string {
+  const requestHash = createHash("sha256")
     .update(JSON.stringify(canonicalize({ version: 1, definition })))
     .digest("hex");
+  // Incoming requests only supply a definition. An upstream-specific version
+  // is reached by its ID or through the original pipeline's primary pointer.
+  return baseUrl
+    ? createHash("sha256").update(`${requestHash}:${baseUrl}`).digest("hex")
+    : requestHash;
 }

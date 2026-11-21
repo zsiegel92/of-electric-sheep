@@ -11,7 +11,7 @@ import {
   users,
 } from "@/lib/db/schema";
 import { question } from "@/lib/system-one/typesafe-api-schemas";
-import type { PipelineDraft } from "./pipeline-draft";
+import { type PipelineDraft, pipelineExecutionKey } from "./pipeline-draft";
 import { hashPipelineDefinition } from "./pipeline-key";
 import type { PipelineDefinition } from "./pipeline-schemas";
 import {
@@ -40,7 +40,6 @@ export async function ensureDecisionPipeline(
     })
     .onConflictDoUpdate({
       target: [decisionPipelines.userId, decisionPipelines.definitionHash],
-      targetWhere: sql`${decisionPipelines.acceptsRequest}`,
       // No-op update lets RETURNING retrieve the winner without replacing its ID or endpoint.
       set: { definitionHash: decisionPipelines.definitionHash },
     })
@@ -379,6 +378,21 @@ export async function evolveDecisionPipeline(
     if (!source?.options)
       throw new Error("The source pipeline definition is not ready.");
     if (
+      pipelineExecutionKey(draft) ===
+      pipelineExecutionKey({
+        baseUrl: source.baseUrl,
+        model: source.model,
+        options: source.options,
+        questions: Object.fromEntries(
+          source.questions.map(({ name, question }) => [name, question]),
+        ),
+      })
+    ) {
+      throw new Error(
+        "Change the pipeline definition before saving a version.",
+      );
+    }
+    if (
       baseUrl &&
       baseUrl !== source.baseUrl &&
       !editablePipelineBaseUrls().includes(baseUrl)
@@ -395,19 +409,18 @@ export async function evolveDecisionPipeline(
       baseUrl,
       displayName,
       uiIgnored,
-      definitionHash: hashPipelineDefinition(definition),
+      definitionHash: hashPipelineDefinition(definition, baseUrl),
       primaryGroupedPipelineId: id,
     };
-    // Existing request signatures keep their entry point, including for URL-only changes.
     const [inserted] = await tx
       .insert(decisionPipelines)
       .values(row)
-      .onConflictDoNothing()
+      .onConflictDoNothing({
+        target: [decisionPipelines.userId, decisionPipelines.definitionHash],
+      })
       .returning({ id: decisionPipelines.id });
     if (!inserted)
-      await tx
-        .insert(decisionPipelines)
-        .values({ ...row, acceptsRequest: false });
+      throw new Error("A pipeline with this definition already exists.");
     await insertPipelineDefinition(tx, id, definition);
 
     const versions = await listPipelineVersions(

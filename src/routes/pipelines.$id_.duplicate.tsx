@@ -14,6 +14,7 @@ import { ViewModeSwitch } from "@/components/view-mode-switch";
 import {
   type PipelineDraft,
   pipelineDraftSchema,
+  pipelineExecutionKey,
 } from "@/lib/decisions/pipeline-draft";
 import { imagesHeader, longContextHeader } from "@/lib/system-one/type-helpers";
 import {
@@ -131,6 +132,8 @@ function DraftEditor({
   const [raw, setRaw] = useState(() => JSON.stringify(original, null, 2));
   const [fieldError, setFieldError] = useState("");
   const [jsonError, setJsonError] = useState("");
+  const hasChanges =
+    pipelineExecutionKey(draft) !== pipelineExecutionKey(original);
   const save = useMutation({
     mutationFn: evolvePipeline,
     onSuccess: ({ id }) =>
@@ -199,7 +202,9 @@ function DraftEditor({
           />
           <Button
             type="button"
-            disabled={!!fieldError || !!jsonError || save.isPending}
+            disabled={
+              !hasChanges || !!fieldError || !!jsonError || save.isPending
+            }
             onClick={() => save.mutate({ data: { sourceId: id, draft } })}
           >
             {save.isPending ? "Saving…" : "Save new pipeline"}

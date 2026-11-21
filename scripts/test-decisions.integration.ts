@@ -793,12 +793,33 @@ await test("decision processing integration", async (t) => {
               }),
               /configured pipeline URL/,
             );
-            const duplicate = await evolveDecisionPipeline(
+            await assert.rejects(
+              evolveDecisionPipeline(user.githubId, original.id, {
+                ...definition,
+                ...metadata,
+              }),
+              /Change the pipeline definition/,
+            );
+            await assert.rejects(
+              evolveDecisionPipeline(user.githubId, original.id, {
+                ...definition,
+                ...metadata,
+                displayName: "Metadata only",
+              }),
+              /Change the pipeline definition/,
+            );
+            const versionUrl = `${baseUrl}/evolved`;
+            const previousUrls = process.env["TYPESAFE_PIPELINE_BASE_URLS"];
+            process.env["TYPESAFE_PIPELINE_BASE_URLS"] = versionUrl;
+            const endpointVersion = await evolveDecisionPipeline(
               user.githubId,
               original.id,
-              { ...definition, ...metadata },
-            );
-            assert.notEqual(duplicate.id, original.id);
+              { ...definition, ...metadata, baseUrl: versionUrl },
+            ).finally(() => {
+              if (previousUrls === undefined)
+                delete process.env["TYPESAFE_PIPELINE_BASE_URLS"];
+              else process.env["TYPESAFE_PIPELINE_BASE_URLS"] = previousUrls;
+            });
             assert.equal(
               (await ensureDecisionPipeline(user, definition)).pipeline.id,
               original.id,
@@ -818,8 +839,15 @@ await test("decision processing integration", async (t) => {
             });
             const revised = await evolveDecisionPipeline(
               user.githubId,
-              duplicate.id,
+              endpointVersion.id,
               { ...edited, ...metadata },
+            );
+            await assert.rejects(
+              evolveDecisionPipeline(user.githubId, original.id, {
+                ...edited,
+                ...metadata,
+              }),
+              /already exists/,
             );
             const standalone = await evolveDecisionPipeline(
               user.githubId,
