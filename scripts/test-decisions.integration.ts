@@ -24,11 +24,9 @@ import {
 } from "../src/lib/decisions/queries";
 import { inngest } from "../src/lib/inngest/inngest";
 import { systemOneRequest } from "../src/lib/system-one/typesafe-api-schemas";
+import { isRequestThatRequiresApiKey } from "../src/lib/typesafe-api/paths";
 import { systemOneRouter } from "../src/server/system-one/router";
-import {
-  isRequestThatRequiresApiKey,
-  systemOneRoutes,
-} from "../src/server/system-one/routes";
+import { systemOneRoutes } from "../src/server/system-one/routes";
 import { withTestScriptDb } from "./test-db";
 
 const input = systemOneRequest.parse({

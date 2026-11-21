@@ -9,15 +9,3 @@ export const systemOneRoutes = {
   decide: { method: "POST", path: "/system-one" },
   decideByPipeline: { method: "POST", path: "/system-one/decide-by-pipeline" },
 } as const satisfies Record<string, HttpRoute>;
-
-type SystemOneRoutes = typeof systemOneRoutes;
-type SystemOnePath = SystemOneRoutes[keyof SystemOneRoutes]["path"];
-type ApiKeyRequestPath = `/api${SystemOnePath}`;
-
-export function isRequestThatRequiresApiKey(
-  pathname: string,
-): pathname is ApiKeyRequestPath {
-  return Object.values(systemOneRoutes).some(
-    ({ path }) => pathname === `/api${path}`,
-  );
-}
