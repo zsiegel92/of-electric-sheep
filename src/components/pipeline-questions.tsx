@@ -1,7 +1,9 @@
 import type { JsonValue } from "@typesafe-ai/sdk";
+import { useState } from "react";
 import type { z } from "zod";
 import type { PipelineQuestion } from "@/lib/decisions/question-links";
 import type { systemOneResponse } from "@/lib/system-one/typesafe-api-schemas";
+import { CopyButton } from "./copy-button";
 
 type Answers = z.output<typeof systemOneResponse>["answers"];
 type Answer = Answers[string];
@@ -25,6 +27,110 @@ export function PipelineQuestions({
 }: {
   questions: PipelineQuestion[];
   answers?: Answers | undefined;
+}) {
+  const [showJson, setShowJson] = useState(false);
+  return (
+    <div className="space-y-3">
+      <label className="flex w-fit items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={showJson}
+          onChange={(event) => setShowJson(event.currentTarget.checked)}
+        />
+        Show as JSON
+      </label>
+      {showJson ? (
+        <QuestionJsonColumns questions={questions} answers={answers} />
+      ) : (
+        <QuestionCards questions={questions} answers={answers} />
+      )}
+    </div>
+  );
+}
+
+function QuestionJsonColumns({
+  questions,
+  answers,
+}: {
+  questions: PipelineQuestion[];
+  answers: Answers | undefined;
+}) {
+  const definitions = Object.fromEntries(
+    questions.map(({ name, question }) => [name, question]),
+  );
+  const names = [
+    ...questions.map(({ name }) => name),
+    ...Object.keys(answers ?? {}).filter(
+      (name) => !Object.hasOwn(definitions, name),
+    ),
+  ];
+  const columns = [{ label: "Questions", rows: jsonRows(definitions, names) }];
+  if (answers)
+    columns.push({ label: "Answers", rows: jsonRows(answers, names) });
+
+  const gridColumns = answers ? "grid-cols-2" : "grid-cols-1";
+  return (
+    <div className="overflow-hidden rounded-lg border bg-background">
+      <div className={`grid divide-x border-b bg-muted ${gridColumns}`}>
+        {columns.map(({ label, rows }) => (
+          <div
+            key={label}
+            className="flex min-w-0 flex-wrap items-center justify-between gap-2 px-3 py-2"
+          >
+            <span className="text-sm font-medium">{label}</span>
+            <CopyButton
+              label={`Copy ${label.toLowerCase()} JSON`}
+              value={rows
+                .map(({ text }) => text)
+                .filter(Boolean)
+                .join("\n")}
+            />
+          </div>
+        ))}
+      </div>
+      <div className={`grid divide-x ${gridColumns}`}>
+        {columns.map(({ label, rows }) => (
+          // Each column stays contiguous in the DOM for native text selection.
+          <pre
+            key={label}
+            className="grid min-w-0 cursor-text select-text grid-rows-subgrid whitespace-pre-wrap wrap-anywhere py-2 font-mono text-xs sm:text-sm"
+            style={{ gridRow: `1 / span ${rows.length}` }}
+          >
+            {rows.map(({ key, text }, index) => (
+              <span
+                key={key}
+                className={`block px-3 ${index > 1 && index < rows.length - 1 ? "border-t border-border/60" : ""}`}
+              >
+                {text}
+              </span>
+            ))}
+          </pre>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function jsonRows(values: Record<string, unknown>, names: string[]) {
+  const last = names.findLast((name) => Object.hasOwn(values, name));
+  return [
+    { key: "open", text: "{" },
+    ...names.map((name) => ({
+      key: `entry:${name}`,
+      text: Object.hasOwn(values, name)
+        ? `  ${JSON.stringify(name)}: ${JSON.stringify(values[name], null, 2).replaceAll("\n", "\n  ")}${name === last ? "" : ","}`
+        : "",
+    })),
+    { key: "close", text: "}" },
+  ];
+}
+
+function QuestionCards({
+  questions,
+  answers,
+}: {
+  questions: PipelineQuestion[];
+  answers: Answers | undefined;
 }) {
   return (
     <ul className="space-y-3">
