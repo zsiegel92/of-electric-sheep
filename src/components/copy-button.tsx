@@ -29,7 +29,7 @@ export function CopyButton({ value }: { value: string }) {
       </Button>
       {status === "failed" && (
         <span role="status" className="text-sm text-destructive">
-          Could not copy. Select and copy the key manually.
+          Could not copy. Select the text and copy it manually.
         </span>
       )}
     </>

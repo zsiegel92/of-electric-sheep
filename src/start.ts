@@ -3,8 +3,8 @@ import {
   createMiddleware,
   createStart,
 } from "@tanstack/react-start";
+import { isRequestThatRequiresApiKey } from "@/lib/typesafe-api/paths";
 import { getUser, type User } from "./lib/auth";
-import { isRequestThatRequiresApiKey } from "./server/system-one/routes";
 
 const authenticate = createMiddleware().server<{ user: User | null }>(
   async ({ request, handlerType, next }) => {

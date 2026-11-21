@@ -29,11 +29,9 @@ import { matchQuestions } from "../src/lib/decisions/question-links";
 import { inngest } from "../src/lib/inngest/inngest";
 import { exactPipelineHeader } from "../src/lib/system-one/type-helpers";
 import { systemOneRequest } from "../src/lib/system-one/typesafe-api-schemas";
+import { isRequestThatRequiresApiKey } from "../src/lib/typesafe-api/paths";
 import { systemOneRouter } from "../src/server/system-one/router";
-import {
-  isRequestThatRequiresApiKey,
-  systemOneRoutes,
-} from "../src/server/system-one/routes";
+import { systemOneRoutes } from "../src/server/system-one/routes";
 import { withTestScriptDb } from "./test-db";
 
 const input = systemOneRequest.parse({

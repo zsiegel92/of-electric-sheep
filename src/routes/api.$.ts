@@ -8,6 +8,7 @@ import type { AnyRouter } from "@orpc/server";
 import { ZodToJsonSchemaConverter } from "@orpc/zod/zod4";
 import { createFileRoute } from "@tanstack/react-router";
 import { apiKeyHeader } from "@/lib/api-keys/schemas";
+import { reshapeTypeSafeApiRequest } from "@/lib/typesafe-api/reshape-request";
 import type { User } from "../lib/auth";
 import { systemOneMultipartRequestSchema } from "../lib/system-one/type-helpers";
 import {
@@ -104,11 +105,14 @@ export const Route = createFileRoute("/api/$")({
   server: {
     handlers: {
       ANY: async ({ request, context }) => {
-        const { response } = await apiHandler.handle(request, {
+        const reshaped = await reshapeTypeSafeApiRequest(request);
+        if (reshaped instanceof Response) return reshaped;
+
+        const { response } = await apiHandler.handle(reshaped, {
           prefix: "/api",
           context: {
             user: context.user,
-            headers: request.headers,
+            headers: reshaped.headers,
           },
         });
 

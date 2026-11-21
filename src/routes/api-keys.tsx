@@ -8,7 +8,12 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { CopyButton } from "../components/copy-button";
 import { Button } from "../components/ui/button";
-import { createApiKey, listApiKeys, revokeApiKey } from "../server/functions";
+import {
+  createApiKey,
+  getTypeSafeApiBaseUrl,
+  listApiKeys,
+  revokeApiKey,
+} from "../server/functions";
 
 const keysQuery = queryOptions({
   queryKey: ["api-keys"],
@@ -16,9 +21,28 @@ const keysQuery = queryOptions({
 });
 
 export const Route = createFileRoute("/api-keys")({
-  loader: ({ context }) => context.queryClient.ensureQueryData(keysQuery),
+  loader: async ({ context }) => {
+    const [baseUrl] = await Promise.all([
+      getTypeSafeApiBaseUrl(),
+      context.queryClient.ensureQueryData(keysQuery),
+    ]);
+    return baseUrl;
+  },
   component: ApiKeys,
 });
+
+function TypeSafeApiBaseUrl() {
+  const baseUrl = Route.useLoaderData();
+  return (
+    <section className="space-y-2 rounded-md border p-3">
+      <h2 className="text-sm font-medium">TypeSafe API base URL</h2>
+      <div className="flex flex-wrap items-center gap-3">
+        <code className="min-w-0 select-all break-all text-sm">{baseUrl}</code>
+        <CopyButton value={baseUrl} />
+      </div>
+    </section>
+  );
+}
 
 function ApiKeys() {
   const queryClient = useQueryClient();
@@ -39,6 +63,7 @@ function ApiKeys() {
   return (
     <main className="space-y-4 py-8">
       <h1 className="text-2xl font-semibold">API keys</h1>
+      <TypeSafeApiBaseUrl />
       <form
         className="flex items-center gap-2"
         action={(form) => {
