@@ -177,6 +177,13 @@ export async function parseSystemOneMultipartRequest(
 
 export const imagesHeader = "typesafe-danger-zone-images";
 export const longContextHeader = "typesafe-danger-zone-long-context";
+export const exactPipelineHeader = "x-use-exact-pipeline";
+export const pipelineRoutingHeaders = z.object({
+  [exactPipelineHeader]: z
+    .literal("true")
+    .exactOptional()
+    .describe("Use the requested pipeline instead of its primary version."),
+});
 const headersSchema = z.object({
   [imagesHeader]: z
     .literal("true")
@@ -304,7 +311,7 @@ export async function toSystemOneTraceInput({
 }
 
 export const decisionInput = z.object({
-  headers: headersSchema,
+  headers: headersSchema.extend(pipelineRoutingHeaders.shape),
   body: decisionInputBody,
 });
 

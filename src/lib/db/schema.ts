@@ -1,4 +1,6 @@
+import { sql } from "drizzle-orm";
 import {
+  check,
   foreignKey,
   index,
   jsonb,
@@ -100,6 +102,68 @@ export const decisionPipelineQuestions = pgTable(
       jsonb("system_prompt").$type<DecisionQuestion["instructions"]>(),
     criteria:
       jsonb().$type<Exclude<DecisionQuestion, { type: "box" }>["criteria"]>(),
+    answerShape: text("answer_shape")
+      .notNull()
+      .generatedAlwaysAs(
+        sql`public.system_one_answer_shape("type", "criteria")`,
+      ),
   },
-  (table) => [primaryKey({ columns: [table.pipelineId, table.name] })],
+  (table) => [
+    primaryKey({ columns: [table.pipelineId, table.name] }),
+    unique("decision_question_answer_shape_key").on(
+      table.pipelineId,
+      table.name,
+      table.answerShape,
+    ),
+  ],
+);
+
+export const decisionQuestionLinks = pgTable(
+  "decision_question_links",
+  {
+    userId: text("user_id").notNull(),
+    pipelineId: uuid("pipeline_id").notNull(),
+    primaryPipelineId: uuid("primary_pipeline_id").notNull(),
+    name: text().notNull(),
+    primaryName: text("primary_name").notNull(),
+    answerShape: text("answer_shape").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.pipelineId, table.name] }),
+    unique("decision_question_links_primary_name_key").on(
+      table.pipelineId,
+      table.primaryName,
+    ),
+    check(
+      "decision_question_links_non_primary",
+      sql`${table.pipelineId} <> ${table.primaryPipelineId}`,
+    ),
+    foreignKey({
+      name: "decision_question_links_group_fk",
+      columns: [table.userId, table.pipelineId, table.primaryPipelineId],
+      foreignColumns: [
+        decisionPipelines.userId,
+        decisionPipelines.id,
+        decisionPipelines.primaryGroupedPipelineId,
+      ],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "decision_question_links_question_fk",
+      columns: [table.pipelineId, table.name, table.answerShape],
+      foreignColumns: [
+        decisionPipelineQuestions.pipelineId,
+        decisionPipelineQuestions.name,
+        decisionPipelineQuestions.answerShape,
+      ],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "decision_question_links_primary_question_fk",
+      columns: [table.primaryPipelineId, table.primaryName, table.answerShape],
+      foreignColumns: [
+        decisionPipelineQuestions.pipelineId,
+        decisionPipelineQuestions.name,
+        decisionPipelineQuestions.answerShape,
+      ],
+    }).onDelete("cascade"),
+  ],
 );

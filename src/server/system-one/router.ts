@@ -8,8 +8,10 @@ import { listModels } from "@/lib/system-one/system-one-api-client";
 import {
   decisionInput,
   decisionRequestBody,
+  exactPipelineHeader,
   imagesHeader,
   longContextHeader,
+  pipelineRoutingHeaders,
   typesafeErrors,
 } from "@/lib/system-one/type-helpers";
 import {
@@ -26,6 +28,8 @@ const apiKeyAuth = os
   .$context<{ headers: Headers }>()
   .errors({
     ...typesafeErrors,
+    CONFLICT: { message: "Pipeline versions need compatible question links" },
+    NOT_FOUND: { message: "Decision pipeline not found" },
     UNAUTHORIZED: { message: "An active API key is required" },
   })
   .use(async ({ context, errors, next }) => {
@@ -60,26 +64,50 @@ export const systemOneRouter = apiKeyAuth.router({
     .input(decisionInput)
     .output(systemOneResponse)
     .handler(({ input: { body, headers }, context: { user } }) =>
-      processDecision(body, user, {
-        enableImages: headers[imagesHeader] === "true",
-        enableLongContext: headers[longContextHeader] === "true",
-      }),
+      processDecision(
+        body,
+        user,
+        {
+          enableImages: headers[imagesHeader] === "true",
+          enableLongContext: headers[longContextHeader] === "true",
+        },
+        headers[exactPipelineHeader] === "true",
+      ),
     ),
 
   decideByPipeline: route({
     ...systemOneRoutes.decideByPipeline,
     summary: "Evaluate content using a stored pipeline",
+    inputStructure: "detailed",
     description:
       "Run the primary pipeline's stored questions against new state. Requires an API key that owns the pipeline. Replay accepts state without image attachments.",
   })
     .errors({ NOT_FOUND: { message: "Decision pipeline not found" } })
     .input(
-      z.object({ pipelineId: z.uuid(), state: systemOneRequest.shape.state }),
+      z.object({
+        headers: pipelineRoutingHeaders,
+        body: z.object({
+          pipelineId: z.uuid(),
+          state: systemOneRequest.shape.state,
+        }),
+      }),
     )
     .output(systemOneResponse)
     .handler(
-      async ({ input: { pipelineId, state }, context: { user }, errors }) => {
-        const result = await processStoredDecision(pipelineId, state, user);
+      async ({
+        input: {
+          body: { pipelineId, state },
+          headers,
+        },
+        context: { user },
+        errors,
+      }) => {
+        const result = await processStoredDecision(
+          pipelineId,
+          state,
+          user,
+          headers[exactPipelineHeader] === "true",
+        );
         if (!result) throw errors.NOT_FOUND();
         return result;
       },

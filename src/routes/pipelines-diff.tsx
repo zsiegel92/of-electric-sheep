@@ -1,0 +1,333 @@
+import { useMutation } from "@tanstack/react-query";
+import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
+import { useState } from "react";
+import { z } from "zod";
+import { Button } from "@/components/ui/button";
+import {
+  compatibleQuestions,
+  matchQuestions,
+  type PipelineVersion,
+} from "@/lib/decisions/question-links";
+import {
+  getPipelineVersions,
+  listPipelines,
+  updateQuestionLinks,
+} from "@/server/pipelines";
+
+const searchSchema = z.object({
+  id1: z.uuid().optional().catch(undefined),
+  id2: z.uuid().optional().catch(undefined),
+});
+export const Route = createFileRoute("/pipelines-diff")({
+  validateSearch: searchSchema,
+  loaderDeps: ({ search }) => search,
+  loader: async ({ deps: { id1, id2 } }) => {
+    const ids = [id1, id2].flatMap((id) => (id ? [id.toLowerCase()] : []));
+    const [pipelines, versions] = await Promise.all([
+      listPipelines(),
+      ids.length ? getPipelineVersions({ data: ids }) : [],
+    ]);
+    return {
+      pipelines,
+      left: versions.find(({ id }) => id === id1?.toLowerCase()),
+      right: versions.find(({ id }) => id === id2?.toLowerCase()),
+      versions,
+    };
+  },
+  component: PipelineDiff,
+});
+
+function PipelineDiff() {
+  const { pipelines, left, right, versions } = Route.useLoaderData();
+  const search = Route.useSearch();
+  const navigate = Route.useNavigate();
+  const sameGroup =
+    left &&
+    right &&
+    left.primaryGroupedPipelineId === right.primaryGroupedPipelineId;
+  const primary = sameGroup
+    ? versions.find(({ id }) => id === left.primaryGroupedPipelineId)
+    : undefined;
+  const canAttach =
+    left &&
+    right &&
+    !sameGroup &&
+    left.id === left.primaryGroupedPipelineId &&
+    right.id === right.primaryGroupedPipelineId &&
+    !pipelines.some(
+      (p) => p.id !== right.id && p.primaryGroupedPipelineId === right.id,
+    );
+  const anchor = primary ?? (canAttach ? left : undefined);
+
+  return (
+    <main className="mx-auto max-w-5xl space-y-6 py-8">
+      <Link to="/pipelines" className="text-sm underline">
+        Pipelines
+      </Link>
+      <h1 className="text-2xl font-semibold">Compare pipelines</h1>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {(["id1", "id2"] as const).map((key, index) => (
+          <label key={key} className="min-w-0 space-y-1 text-sm font-medium">
+            Version {index + 1}
+            <select
+              className="block w-full rounded-md border bg-background px-2 py-2 text-sm"
+              value={search[key] ?? ""}
+              onChange={(event) => {
+                void navigate({
+                  search: {
+                    ...search,
+                    [key]: event.currentTarget.value || undefined,
+                  },
+                });
+              }}
+            >
+              <option value="">Select a pipeline</option>
+              {pipelines.map((pipeline) => (
+                <option key={pipeline.id} value={pipeline.id}>
+                  {pipeline.model ?? "Pending"} · {pipeline.id.slice(0, 8)} ·{" "}
+                  {pipeline.id === pipeline.primaryGroupedPipelineId
+                    ? "Primary"
+                    : "Version"}
+                </option>
+              ))}
+            </select>
+          </label>
+        ))}
+      </div>
+      {left && right && left.id !== right.id && anchor ? (
+        <Comparison
+          key={`${left.id}/${right.id}/${anchor.id}`}
+          left={left}
+          right={right}
+          primary={anchor}
+          attach={!!canAttach}
+        />
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          {search.id1 && search.id2 && !(left && right)
+            ? "One or both pipelines were not found."
+            : left && right && left.id !== right.id
+              ? "Choose versions from the same group. To link a standalone pipeline, select the intended primary first."
+              : "Select two different pipelines to compare."}
+        </p>
+      )}
+    </main>
+  );
+}
+
+function Comparison({
+  left,
+  right,
+  primary,
+  attach,
+}: {
+  left: PipelineVersion;
+  right: PipelineVersion;
+  primary: PipelineVersion;
+  attach: boolean;
+}) {
+  const version =
+    left.id === primary.id ? right : right.id === primary.id ? left : undefined;
+  const [draft, setDraft] = useState(() =>
+    version ? matchQuestions(version, primary) : new Map<string, string>(),
+  );
+  const router = useRouter();
+  const save = useMutation({
+    mutationFn: updateQuestionLinks,
+    onSuccess: () => router.invalidate(),
+  });
+
+  const leftLinks =
+    version?.id === left.id ? draft : matchQuestions(left, primary);
+  const rightLinks =
+    version?.id === right.id ? draft : matchQuestions(right, primary);
+  const rightByPrimary = new Map(
+    right.questions.flatMap((question) => {
+      const key = rightLinks.get(question.name);
+      return key === undefined ? [] : [[key, question] as const];
+    }),
+  );
+  const paired = new Set<string>();
+  const pairs = left.questions.map((question) => {
+    const key = leftLinks.get(question.name);
+    const match = key === undefined ? undefined : rightByPrimary.get(key);
+    if (match) paired.add(match.name);
+    return { key: `left-${question.name}`, a: question, b: match };
+  });
+  const rows = [
+    ...pairs,
+    ...right.questions
+      .filter((q) => !paired.has(q.name))
+      .map((q) => ({ key: `right-${q.name}`, a: undefined, b: q })),
+  ];
+  const compatible = version && compatibleQuestions(version, primary);
+  const needsLinks =
+    leftLinks.size !== left.questions.length ||
+    rightLinks.size !== right.questions.length;
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 gap-3">
+        {[left, right].map((pipeline) => (
+          <div
+            key={pipeline.id}
+            className="min-w-0 space-y-1 rounded-lg border bg-muted p-3 text-sm"
+          >
+            <Link
+              to="/pipelines/$id"
+              params={{ id: pipeline.id }}
+              search={{}}
+              className="font-medium underline"
+            >
+              {pipeline.model ?? "Definition pending"}
+            </Link>
+            <p className="break-all font-mono text-xs text-muted-foreground">
+              {pipeline.id}
+            </p>
+            <p className="break-all">
+              {pipeline.baseUrl ?? "Default upstream"}
+            </p>
+            <p className="break-all text-xs text-muted-foreground">
+              {Object.keys(pipeline.options?.headers ?? {}).join(", ") ||
+                "Default capabilities"}
+            </p>
+          </div>
+        ))}
+      </div>
+      {version ? (
+        <section className="space-y-3 rounded-lg border p-4">
+          <h2 className="font-medium">Question links</h2>
+          {!compatible ? (
+            <p className="text-sm text-muted-foreground">
+              These versions need the same set of answer shapes to link. Choice
+              keys and score rubric lengths must match.
+            </p>
+          ) : (
+            <>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {version.questions.map((question) => (
+                  <label
+                    key={question.name}
+                    className="min-w-0 space-y-1 text-sm"
+                  >
+                    <span className="break-all font-medium">
+                      {question.name}
+                    </span>
+                    <select
+                      className="block w-full rounded-md border bg-background px-2 py-2 text-sm"
+                      value={draft.get(question.name) ?? ""}
+                      onChange={(event) => {
+                        save.reset();
+                        const value = event.currentTarget.value;
+                        setDraft((current) => {
+                          const next = new Map(
+                            [...current].filter(
+                              ([name, target]) =>
+                                name !== question.name && target !== value,
+                            ),
+                          );
+                          if (value) next.set(question.name, value);
+                          return next;
+                        });
+                      }}
+                    >
+                      <option value="">Choose primary question</option>
+                      {primary.questions
+                        .filter(
+                          (target) =>
+                            target.answerShape === question.answerShape,
+                        )
+                        .map((target) => (
+                          <option key={target.name} value={target.name}>
+                            {target.name}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                ))}
+              </div>
+              <Button
+                type="button"
+                disabled={
+                  draft.size !== version.questions.length || save.isPending
+                }
+                onClick={() =>
+                  save.mutate({
+                    data: {
+                      pipelineId: version.id,
+                      primaryPipelineId: primary.id,
+                      links: [...draft].map(([name, primaryName]) => ({
+                        name,
+                        primaryName,
+                      })),
+                    },
+                  })
+                }
+              >
+                {attach ? "Link to primary" : "Save links"}
+              </Button>
+              {save.error && (
+                <p role="alert" className="text-sm text-destructive">
+                  {save.error.message}
+                </p>
+              )}
+              {save.isSuccess && (
+                <p role="status" className="text-sm">
+                  Links saved.
+                </p>
+              )}
+            </>
+          )}
+        </section>
+      ) : (
+        <div className="flex flex-wrap gap-4 text-sm">
+          {[left, right].map((pipeline, index) => (
+            <Link
+              key={pipeline.id}
+              to="/pipelines-diff"
+              search={{ id1: primary.id, id2: pipeline.id }}
+              className="underline"
+            >
+              Edit version {index + 1} links
+            </Link>
+          ))}
+        </div>
+      )}
+      <section className="space-y-2">
+        <h2 className="font-medium">Question differences</h2>
+        {needsLinks && (
+          <p className="text-sm text-muted-foreground">
+            Unlinked questions are shown on their own.
+          </p>
+        )}
+        {rows.map(({ key, a, b }) => {
+          const changed =
+            a?.name !== b?.name ||
+            JSON.stringify(a?.question) !== JSON.stringify(b?.question);
+          return (
+            <div
+              key={key}
+              className={`grid grid-cols-2 gap-3 rounded-lg border ${changed ? "bg-muted" : ""}`}
+            >
+              {[a, b].map((question, index) => (
+                <div
+                  key={index === 0 ? "left" : "right"}
+                  className="min-w-0 space-y-2 p-3"
+                >
+                  <h3 className="break-all text-sm font-medium">
+                    {question?.name ?? "No linked question"}
+                  </h3>
+                  {question && (
+                    <pre className="whitespace-pre-wrap break-words text-xs">
+                      {JSON.stringify(question.question, null, 2)}
+                    </pre>
+                  )}
+                </div>
+              ))}
+            </div>
+          );
+        })}
+      </section>
+    </div>
+  );
+}

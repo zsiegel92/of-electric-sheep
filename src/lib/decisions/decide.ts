@@ -1,4 +1,5 @@
 import "@tanstack/react-start/server-only";
+import { ORPCError } from "@orpc/server";
 import type { User } from "@/lib/auth";
 import { inngest } from "@/lib/inngest/inngest";
 import { traceGeneration } from "@/lib/langfuse/tracing";
@@ -9,33 +10,47 @@ import {
   getSystemOneCoreIngredients,
   imagesHeader,
   longContextHeader,
+  type SystemOneCoreIngredients,
   toSystemOneTraceInput,
 } from "@/lib/system-one/type-helpers";
 import { newPipelineUsed, pipelineUsed } from "./events";
-import { pipelineDefinitionSchema } from "./pipeline-schemas";
-import { ensureDecisionPipeline, findDecisionPipeline } from "./queries";
+import {
+  type PipelineDefinition,
+  pipelineDefinitionSchema,
+} from "./pipeline-schemas";
+import { ensureDecisionPipeline, findPipelineVersions } from "./queries";
+import { matchQuestions, type PipelineVersion } from "./question-links";
 
 export async function processDecision(
   input: DecisionInputBody,
   user: User,
   capabilities: DecisionCapabilities = {},
-  selectedPipeline?: {
-    id: string;
-    baseUrl: string | null;
-    hasDefinition: boolean;
-  },
+  exact = false,
 ): ReturnType<typeof runDecision> {
   const ingredients = await getSystemOneCoreIngredients(input, capabilities);
   const definition = pipelineDefinitionSchema.parse(ingredients);
-  const pipeline =
-    selectedPipeline ??
-    (await ensureDecisionPipeline(user, definition)).pipeline;
+  const { pipeline } = await ensureDecisionPipeline(user, definition);
+  if (!exact && pipeline.primaryGroupedPipelineId !== pipeline.id) {
+    const { version, primary } = await findPipelineVersions(
+      user.githubId,
+      pipeline.id,
+    );
+    if (!version || !primary?.options || !version.options) {
+      throw new ORPCError("NOT_FOUND", {
+        message: "Pipeline definition is not ready",
+      });
+    }
+    return runStoredVersion(version, primary, ingredients, user);
+  }
+  return runPipeline(ingredients, user, pipeline, definition);
+}
 
-  // TODO:
-  // 2
-  // - LATER: even when pipline IS found and used, emit an inngest event with a handler with very high debounce (e.g. 30 mins) that queries against the observability backend. We may have to attach user metadata to the requests or otel events or something, not sure if that should happen here or elsewhere, explicitly or in some contextualized way via the otel hook.
-  // 3
-  // - LATER LATER: if enough observations and annotated examples (tbd how to drive this and store it), start a fine-tune job via some dream cycle (tbd) and if improvement is attained, save baseurl (and maybe null api key?) for that fine-tuned model. Fine-tuned models should only be reachable from this typescript backend and the logic for using one should only let it be used if the user making the request is the user whose model it is (obviously). Maybe will have to store fine-tuned model assets on something like modal volume idk. Hopefully it's not too crazy to store a bunch of LORAs or something.
+function runPipeline(
+  ingredients: SystemOneCoreIngredients,
+  user: User,
+  pipeline: { id: string; baseUrl: string | null; hasDefinition: boolean },
+  definition: PipelineDefinition,
+) {
   return traceGeneration(
     "decisions.process",
     { pipelineId: pipeline.id },
@@ -78,25 +93,74 @@ export async function processDecision(
   );
 }
 
-export async function processStoredDecision(
-  pipelineId: string,
-  state: Parameters<typeof runDecision>[0]["state"],
+async function runStoredVersion(
+  version: PipelineVersion,
+  primary: PipelineVersion,
+  { state, assets }: Pick<SystemOneCoreIngredients, "state" | "assets">,
   user: User,
 ) {
-  const stored = await findDecisionPipeline(user.githubId, pipelineId);
-  if (!stored) return;
-
-  const {
-    pipeline,
-    definition: { model, questions, options },
-  } = stored;
-  return processDecision(
+  const sameVersion = version.id === primary.id;
+  const links = sameVersion ? undefined : matchQuestions(version, primary);
+  if (
+    links &&
+    (links.size !== version.questions.length ||
+      links.size !== primary.questions.length)
+  ) {
+    throw new ORPCError("CONFLICT", {
+      message: "Pipeline versions need compatible question links",
+    });
+  }
+  const definition = pipelineDefinitionSchema.parse({
+    model: primary.model,
+    questions: Object.fromEntries(
+      primary.questions.map(({ name, question }) => [name, question]),
+    ),
+    options: primary.options,
+  });
+  const { model, questions, options } = definition;
+  const ingredients = await getSystemOneCoreIngredients(
     { model, questions, state },
-    user,
     {
       enableImages: options.headers[imagesHeader] === "true",
       enableLongContext: options.headers[longContextHeader] === "true",
     },
-    pipeline,
   );
+  const result = await runPipeline(
+    { ...ingredients, assets },
+    user,
+    { id: primary.id, baseUrl: primary.baseUrl, hasDefinition: true },
+    definition,
+  );
+  if (!links) return result;
+
+  return {
+    ...result,
+    answers: Object.fromEntries(
+      version.questions.map(({ name, question }) => {
+        const primaryName = links.get(name);
+        const answer =
+          primaryName === undefined ? undefined : result.answers[primaryName];
+        if (answer?.type !== question.type)
+          throw new ORPCError("BAD_GATEWAY", {
+            message: "TypeSafe returned an unexpected answer",
+          });
+        return [name, answer];
+      }),
+    ),
+  };
+}
+
+export async function processStoredDecision(
+  pipelineId: string,
+  state: SystemOneCoreIngredients["state"],
+  user: User,
+  exact = false,
+) {
+  const { version, primary } = await findPipelineVersions(
+    user.githubId,
+    pipelineId,
+    exact,
+  );
+  if (!version?.options || !primary?.options) return;
+  return runStoredVersion(version, primary, { state, assets: undefined }, user);
 }

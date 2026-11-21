@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import { test } from "node:test";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
-import { and, DrizzleQueryError, eq, inArray } from "drizzle-orm";
+import { DrizzleQueryError, eq, inArray } from "drizzle-orm";
 import { PostgresError } from "postgres";
 import { createApiKey, saveUser } from "../src/lib/api-keys/queries";
 import { apiKeyHeader } from "../src/lib/api-keys/schemas";
@@ -14,15 +14,20 @@ import {
   decisionPipelineDefinitions,
   decisionPipelineQuestions,
   decisionPipelines,
+  decisionQuestionLinks,
   users,
 } from "../src/lib/db/schema";
 import { newPipelineUsed, pipelineUsed } from "../src/lib/decisions/events";
 import { pipelineDefinitionSchema } from "../src/lib/decisions/pipeline-schemas";
 import {
   ensureDecisionPipeline,
+  listPipelineVersions,
   saveDecisionPipelineDefinition,
+  saveQuestionLinks,
 } from "../src/lib/decisions/queries";
+import { matchQuestions } from "../src/lib/decisions/question-links";
 import { inngest } from "../src/lib/inngest/inngest";
+import { exactPipelineHeader } from "../src/lib/system-one/type-helpers";
 import { systemOneRequest } from "../src/lib/system-one/typesafe-api-schemas";
 import { systemOneRouter } from "../src/server/system-one/router";
 import {
@@ -69,30 +74,45 @@ await test("decision processing integration", async (t) => {
   const server = createServer(async (request, response) => {
     const chunks: Buffer[] = [];
     for await (const chunk of request) chunks.push(Buffer.from(chunk));
+    const body = JSON.parse(Buffer.concat(chunks).toString());
+    const { questions } = systemOneRequest
+      .pick({ questions: true })
+      .parse(body);
     calls.push({
       path: request.url ?? "",
-      body: JSON.parse(Buffer.concat(chunks).toString()),
+      body,
       authorization: request.headers.authorization ?? "",
     });
     response.setHeader("Content-Type", "application/json");
     response.end(
       JSON.stringify({
         model: "test-model",
-        answers: {
-          topic: {
-            type: "choice",
-            choice: "yes",
-            confidence: 1,
-            probabilities: { yes: 1 },
-          },
-          quality: {
-            type: "score",
-            score: 0,
-            confidence: 1,
-            legend: { "0": "Low", "1": "High" },
-            probabilities: { "0": 1, "1": 0 },
-          },
-        },
+        answers: Object.fromEntries(
+          Object.entries(questions).map(([name, question]) => {
+            const answers = {
+              choice: {
+                type: "choice",
+                choice: "yes",
+                confidence: 1,
+                probabilities: { yes: 1 },
+              },
+              score: {
+                type: "score",
+                score: 0,
+                confidence: 1,
+                legend: { "0": "Low", "1": "High" },
+                probabilities: { "0": 1, "1": 0 },
+              },
+              noul: { type: "noul", noul: name === "alpha" ? 1 : 0 },
+              box: {
+                type: "box",
+                box: { top: 0, bottom: 1, left: 0, right: 1 },
+                confidence: 1,
+              },
+            };
+            return [name, answers[question.type]];
+          }),
+        ),
         usage: { input_tokens: 1, output_tokens: 1 },
       }),
     );
@@ -129,13 +149,19 @@ await test("decision processing integration", async (t) => {
       };
       const replayPath = `/api${systemOneRoutes.decideByPipeline.path}`;
       const api = new OpenAPIHandler(systemOneRouter);
-      const replay = async (pipelineId: string, secret?: string) => {
+      const post = async (
+        path: string,
+        body: unknown,
+        secret?: string,
+        exact = false,
+      ) => {
         const headers = new Headers({ "Content-Type": "application/json" });
         if (secret) headers.set(apiKeyHeader, secret);
-        const request = new Request(`http://localhost${replayPath}`, {
+        if (exact) headers.set(exactPipelineHeader, "true");
+        const request = new Request(`http://localhost${path}`, {
           method: "POST",
           headers,
-          body: JSON.stringify({ pipelineId, state: { text: "Replay state" } }),
+          body: JSON.stringify(body),
         });
         const { response } = await api.handle(request, {
           prefix: "/api",
@@ -144,6 +170,13 @@ await test("decision processing integration", async (t) => {
         assert.ok(response);
         return response;
       };
+      const replay = (pipelineId: string, secret?: string, exact = false) =>
+        post(
+          replayPath,
+          { pipelineId, state: { text: "Replay state" } },
+          secret,
+          exact,
+        );
       try {
         await t.test(
           "a new decision uses the default upstream and publishes a creation event",
@@ -492,9 +525,18 @@ await test("decision processing integration", async (t) => {
             assert.ok(creation && creation.name === newPipelineUsed.name);
             const { pipelineId: primaryId, definition: primaryDefinition } =
               creation.data;
+            const aliasDefinition = {
+              ...primaryDefinition,
+              model: "alias-model",
+            };
             const { pipeline: alias } = await ensureDecisionPipeline(
               owner,
-              definition,
+              aliasDefinition,
+            );
+            await saveDecisionPipelineDefinition(
+              alias.id,
+              owner.githubId,
+              aliasDefinition,
             );
             const { pipeline: replacement } = await ensureDecisionPipeline(
               owner,
@@ -518,37 +560,18 @@ await test("decision processing integration", async (t) => {
               error.cause.code === "23503" &&
               error.cause.constraint_name ===
                 "decision_pipelines_primary_grouped_pipeline_fk";
-            await point(alias.id, primaryId);
-            await assert.rejects(
-              point(alias.id, foreign.id),
-              violatesGroupConstraint,
-            );
-            await assert.rejects(
-              point(replacement.id, alias.id),
-              violatesGroupConstraint,
-            );
-            await assert.rejects(
-              point(primaryId, alias.id),
-              violatesGroupConstraint,
-            );
-            await assert.rejects(
-              point(primaryId, replacement.id),
-              violatesGroupConstraint,
-            );
-            const reused = await ensureDecisionPipeline(owner, definition);
-            assert.equal(reused.pipeline.primaryGroupedPipelineId, primaryId);
-
             assert.ok(isRequestThatRequiresApiKey(replayPath));
-            assert.equal((await replay(alias.id)).status, 401);
+            assert.equal((await replay(primaryId)).status, 401);
             assert.equal((await replay(randomUUID(), secret)).status, 404);
-            assert.equal((await replay(alias.id, secret)).status, 404);
+            assert.equal((await replay(primaryId, secret)).status, 404);
+            await assert.rejects(point(alias.id, primaryId));
             assert.equal(calls.length, 1);
             await saveDecisionPipelineDefinition(
               primaryId,
               other.githubId,
               primaryDefinition,
             );
-            assert.equal((await replay(alias.id, secret)).status, 404);
+            assert.equal((await replay(primaryId, secret)).status, 404);
             await Promise.all([
               saveDecisionPipelineDefinition(
                 primaryId,
@@ -566,6 +589,34 @@ await test("decision processing integration", async (t) => {
               .set({ baseUrl: `${baseUrl}/primary` })
               .where(eq(decisionPipelines.id, primaryId));
 
+            await saveQuestionLinks(
+              owner.githubId,
+              alias.id,
+              primaryId,
+              Object.keys(aliasDefinition.questions).map((name) => ({
+                name,
+                primaryName: name,
+              })),
+            );
+            await assert.rejects(
+              point(replacement.id, alias.id),
+              violatesGroupConstraint,
+            );
+            await assert.rejects(
+              point(primaryId, alias.id),
+              violatesGroupConstraint,
+            );
+            await assert.rejects(
+              point(primaryId, replacement.id),
+              violatesGroupConstraint,
+            );
+            await assert.rejects(
+              point(replacement.id, foreign.id),
+              violatesGroupConstraint,
+            );
+            const reused = await ensureDecisionPipeline(owner, aliasDefinition);
+            assert.equal(reused.pipeline.primaryGroupedPipelineId, primaryId);
+
             assert.equal((await replay(alias.id, otherSecret)).status, 404);
             const result = await replay(alias.id, secret);
             assert.equal(result.status, 200);
@@ -580,24 +631,138 @@ await test("decision processing integration", async (t) => {
             assert.equal(events[2]?.data.pipelineId, primaryId);
             assert.deepEqual(events[2]?.data.definition, primaryDefinition);
             assert.equal((await rowsFor(owner)).length, 3);
-
-            await db
-              .update(decisionPipelines)
-              .set({ primaryGroupedPipelineId: replacement.id })
-              .where(
-                and(
-                  eq(decisionPipelines.userId, owner.githubId),
-                  eq(decisionPipelines.primaryGroupedPipelineId, primaryId),
-                ),
-              );
-            assert.ok(
-              (await rowsFor(owner)).every(
-                (pipeline) =>
-                  pipeline.primaryGroupedPipelineId === replacement.id,
-              ),
+          },
+        );
+        await t.test(
+          "ambiguous questions require explicit compatible links and preserve caller answer names",
+          async () => {
+            const user = await registerUser();
+            const { secret } = await createApiKey(user, "Routing test");
+            const primary = pipelineDefinitionSchema.parse({
+              model: "primary",
+              options: { headers: {} },
+              questions: {
+                alpha: { type: "noul", instructions: "Check alpha" },
+                beta: { type: "noul", instructions: "Check beta" },
+                category: {
+                  type: "choice",
+                  criteria: { yes: "Yes", no: "No" },
+                },
+              },
+            });
+            const version = pipelineDefinitionSchema.parse({
+              model: "version",
+              options: { headers: {} },
+              questions: {
+                one: { type: "noul", instructions: "Check one" },
+                two: { type: "noul", instructions: "Check two" },
+                topic: {
+                  type: "choice",
+                  criteria: { no: "New no", yes: "New yes" },
+                },
+              },
+            });
+            const primaryId = (await ensureDecisionPipeline(user, primary))
+              .pipeline.id;
+            const versionId = (await ensureDecisionPipeline(user, version))
+              .pipeline.id;
+            await saveDecisionPipelineDefinition(
+              primaryId,
+              user.githubId,
+              primary,
             );
-            assert.equal((await replay(alias.id, secret)).status, 404);
-            assert.equal(calls.length, 2);
+            await saveDecisionPipelineDefinition(
+              versionId,
+              user.githubId,
+              version,
+            );
+            await assert.rejects(
+              db
+                .update(decisionPipelines)
+                .set({ primaryGroupedPipelineId: primaryId })
+                .where(eq(decisionPipelines.id, versionId)),
+            );
+
+            const versions = await listPipelineVersions(user.githubId, [
+              versionId,
+              primaryId,
+            ]);
+            const stored = versions.find(({ id }) => id === versionId);
+            const canonical = versions.find(({ id }) => id === primaryId);
+            assert.ok(stored && canonical);
+            assert.deepEqual(
+              [...matchQuestions(stored, canonical)],
+              [["topic", "category"]],
+            );
+            const links = [
+              { name: "one", primaryName: "alpha" },
+              { name: "two", primaryName: "beta" },
+              { name: "topic", primaryName: "category" },
+            ];
+            await saveQuestionLinks(user.githubId, versionId, primaryId, links);
+
+            const shape = stored.questions.find(
+              ({ name }) => name === "one",
+            )?.answerShape;
+            assert.ok(shape);
+            const replaceLinksWithOne = (primaryName: string) =>
+              db.transaction(async (tx) => {
+                await tx
+                  .delete(decisionQuestionLinks)
+                  .where(eq(decisionQuestionLinks.pipelineId, versionId));
+                await tx.insert(decisionQuestionLinks).values({
+                  userId: user.githubId,
+                  pipelineId: versionId,
+                  primaryPipelineId: primaryId,
+                  name: "one",
+                  primaryName,
+                  answerShape: shape,
+                });
+              });
+            await assert.rejects(
+              replaceLinksWithOne("category"),
+              (error) =>
+                error instanceof DrizzleQueryError &&
+                error.cause instanceof PostgresError &&
+                error.cause.constraint_name ===
+                  "decision_question_links_primary_question_fk",
+            );
+            await assert.rejects(replaceLinksWithOne("alpha"));
+
+            const decidePath = `/api${systemOneRoutes.decide.path}`;
+            const incoming = {
+              model: version.model,
+              questions: version.questions,
+              state: "Routing test",
+            };
+            const routed = await post(decidePath, incoming, secret);
+            assert.equal(routed.status, 200, await routed.clone().text());
+            assert.deepEqual(calls[0]?.body, {
+              ...incoming,
+              model: primary.model,
+              questions: primary.questions,
+            });
+            assert.equal((await routed.json()).answers.one.noul, 1);
+            const exact = await post(decidePath, incoming, secret, true);
+            assert.equal(exact.status, 200, await exact.clone().text());
+            assert.deepEqual(calls[1]?.body, incoming);
+            assert.equal((await exact.json()).answers.one.noul, 0);
+
+            await saveQuestionLinks(user.githubId, versionId, primaryId, [
+              { name: "one", primaryName: "beta" },
+              { name: "two", primaryName: "alpha" },
+              { name: "topic", primaryName: "category" },
+            ]);
+            const swapped = await replay(versionId, secret);
+            assert.equal(swapped.status, 200, await swapped.clone().text());
+            assert.equal((await swapped.json()).answers.two.noul, 1);
+            const exactReplay = await replay(versionId, secret, true);
+            assert.equal(
+              exactReplay.status,
+              200,
+              await exactReplay.clone().text(),
+            );
+            assert.equal((await exactReplay.json()).answers.two.noul, 0);
           },
         );
       } finally {

@@ -18,9 +18,14 @@ export function Navbar() {
             OfElectricSheep
           </a>
           {user && (
-            <Link to="/api-keys" className="text-sm hover:underline">
-              API keys
-            </Link>
+            <>
+              <Link to="/pipelines" className="text-sm hover:underline">
+                Pipelines
+              </Link>
+              <Link to="/api-keys" className="text-sm hover:underline">
+                API keys
+              </Link>
+            </>
           )}
         </div>
         <div className="ml-auto min-w-0">
