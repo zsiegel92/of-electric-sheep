@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
-import { Pencil } from "lucide-react";
+import { ArrowUpRight, Pencil } from "lucide-react";
 import { useState } from "react";
 import { z } from "zod";
 import { PipelineQuestions } from "@/components/pipeline-questions";
@@ -141,9 +141,9 @@ function PipelineRow({
 
   return (
     <li
-      className={`flex flex-wrap items-center justify-between gap-3 px-4 py-3 ${isPrimary ? "bg-muted" : ""}`}
+      className={`flex flex-wrap items-stretch gap-3 px-4 py-3 ${isPrimary ? "bg-muted" : ""}`}
     >
-      <div className="min-w-0 space-y-1">
+      <div className="min-w-0 flex-1 space-y-1">
         {draftName === undefined ? (
           <div className="flex flex-wrap items-center gap-2">
             <p className="break-all text-sm font-medium">
@@ -162,6 +162,22 @@ function PipelineRow({
               }}
             >
               <Pencil aria-hidden="true" />
+            </Button>
+            <Button
+              type="button"
+              size="xs"
+              variant="ghost"
+              disabled={update.isPending}
+              onClick={() => {
+                update.mutate({
+                  data: {
+                    pipelineId: pipeline.id,
+                    uiIgnored: !pipeline.uiIgnored,
+                  },
+                });
+              }}
+            >
+              {pipeline.uiIgnored ? "Unignore" : "Ignore"}
             </Button>
             <span className="text-xs text-muted-foreground">
               {isPrimary ? "Primary" : "Version"}
@@ -217,7 +233,7 @@ function PipelineRow({
           </p>
         )}
       </div>
-      <div className="flex flex-wrap items-center gap-4 text-sm">
+      <div className="flex items-stretch gap-4 text-sm">
         {canCompareWithPrimary && (
           <Link
             to="/pipelines-diff"
@@ -225,7 +241,7 @@ function PipelineRow({
               id1: pipeline.primaryGroupedPipelineId,
               id2: pipeline.id,
             }}
-            className="underline"
+            className="self-center underline"
           >
             Compare
           </Link>
@@ -234,23 +250,10 @@ function PipelineRow({
           to="/pipelines/$id"
           params={{ id: pipeline.id }}
           search={{}}
-          className="underline"
+          className="-my-3 -mr-4 flex min-h-20 min-w-28 items-center justify-center gap-2 border-l border-foreground/25 bg-gradient-to-r from-muted to-background px-4 font-medium transition-colors hover:from-accent hover:to-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
         >
-          Open
+          Open <ArrowUpRight className="size-4" aria-hidden="true" />
         </Link>
-        <Button
-          type="button"
-          size="xs"
-          variant="outline"
-          disabled={update.isPending || draftName !== undefined}
-          onClick={() => {
-            update.mutate({
-              data: { pipelineId: pipeline.id, uiIgnored: !pipeline.uiIgnored },
-            });
-          }}
-        >
-          {pipeline.uiIgnored ? "Unignore" : "Ignore"}
-        </Button>
       </div>
       <PipelineQuestionDetails pipelineId={pipeline.id} />
     </li>

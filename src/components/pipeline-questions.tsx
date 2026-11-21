@@ -4,6 +4,7 @@ import type { z } from "zod";
 import type { PipelineQuestion } from "@/lib/decisions/question-links";
 import type { systemOneResponse } from "@/lib/system-one/typesafe-api-schemas";
 import { CopyButton } from "./copy-button";
+import { ViewModeSwitch } from "./view-mode-switch";
 
 type Answers = z.output<typeof systemOneResponse>["answers"];
 type Answer = Answers[string];
@@ -31,14 +32,7 @@ export function PipelineQuestions({
   const [showJson, setShowJson] = useState(false);
   return (
     <div className="space-y-3">
-      <label className="flex w-fit items-center gap-2 text-sm">
-        <input
-          type="checkbox"
-          checked={showJson}
-          onChange={(event) => setShowJson(event.currentTarget.checked)}
-        />
-        Show as JSON
-      </label>
+      <ViewModeSwitch showJson={showJson} onChange={setShowJson} />
       {showJson ? (
         <QuestionJsonColumns questions={questions} answers={answers} />
       ) : (
