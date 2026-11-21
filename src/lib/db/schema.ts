@@ -48,6 +48,7 @@ export const decisionPipelines = pgTable(
       .notNull()
       .references(() => users.githubId, { onDelete: "cascade" }),
     definitionHash: text("definition_hash").notNull(),
+    acceptsRequest: boolean("accepts_request").notNull().default(true),
     primaryGroupedPipelineId: uuid("primary_grouped_pipeline_id").notNull(),
     displayName: text("display_name"),
     uiIgnored: boolean("ui_ignored").notNull().default(false),
@@ -57,10 +58,9 @@ export const decisionPipelines = pgTable(
       .defaultNow(),
   },
   (table) => [
-    uniqueIndex("decision_pipelines_user_definition_idx").on(
-      table.userId,
-      table.definitionHash,
-    ),
+    uniqueIndex("decision_pipelines_user_definition_idx")
+      .on(table.userId, table.definitionHash)
+      .where(sql`${table.acceptsRequest}`),
     unique("decision_pipelines_user_id_primary_group_key").on(
       table.userId,
       table.id,

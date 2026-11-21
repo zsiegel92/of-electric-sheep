@@ -110,6 +110,22 @@ function Pipelines() {
                     canCompareWithPrimary={
                       kind !== null && !!primary && pipeline.id !== primaryId
                     }
+                    canAssociate={
+                      pipeline.id === primaryId &&
+                      !!pipeline.linkShapeKey &&
+                      !pipelines.some(
+                        (member) =>
+                          member.id !== pipeline.id &&
+                          member.primaryGroupedPipelineId === pipeline.id,
+                      ) &&
+                      group.some(
+                        (target) =>
+                          target.id !== pipeline.id &&
+                          target.id === target.primaryGroupedPipelineId &&
+                          target.linkShapeKey === pipeline.linkShapeKey,
+                      )
+                    }
+                    showIgnored={showIgnored}
                   />
                 ))}
               </ul>
@@ -124,9 +140,13 @@ function Pipelines() {
 function PipelineRow({
   pipeline,
   canCompareWithPrimary,
+  canAssociate,
+  showIgnored,
 }: {
   pipeline: PipelineSummary;
   canCompareWithPrimary: boolean;
+  canAssociate: boolean;
+  showIgnored: boolean | undefined;
 }) {
   const router = useRouter();
   const [draftName, setDraftName] = useState<string>();
@@ -234,6 +254,15 @@ function PipelineRow({
         )}
       </div>
       <div className="flex items-stretch gap-4 text-sm">
+        {canAssociate && (
+          <Link
+            to="/pipelines-diff"
+            search={{ id2: pipeline.id, associate: true, showIgnored }}
+            className="self-center underline"
+          >
+            Associate with primary
+          </Link>
+        )}
         {canCompareWithPrimary && (
           <Link
             to="/pipelines-diff"

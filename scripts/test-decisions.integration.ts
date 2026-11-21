@@ -21,7 +21,9 @@ import { newPipelineUsed, pipelineUsed } from "../src/lib/decisions/events";
 import { pipelineDefinitionSchema } from "../src/lib/decisions/pipeline-schemas";
 import {
   ensureDecisionPipeline,
+  evolveDecisionPipeline,
   listPipelineVersions,
+  promoteDecisionPipeline,
   saveDecisionPipelineDefinition,
   saveQuestionLinks,
 } from "../src/lib/decisions/queries";
@@ -761,6 +763,123 @@ await test("decision processing integration", async (t) => {
               await exactReplay.clone().text(),
             );
             assert.equal((await exactReplay.json()).answers.two.noul, 0);
+          },
+        );
+        await t.test(
+          "evolved versions are saved separately and promotion reroutes earlier requests",
+          async () => {
+            const user = await registerUser();
+            const other = await registerUser();
+            const { secret } = await createApiKey(user, "Evolution test");
+            const { pipeline: original } = await ensureDecisionPipeline(
+              user,
+              definition,
+            );
+            await saveDecisionPipelineDefinition(
+              original.id,
+              user.githubId,
+              definition,
+            );
+            const metadata = {
+              baseUrl: null,
+              displayName: null,
+              uiIgnored: false,
+            };
+            await assert.rejects(
+              evolveDecisionPipeline(user.githubId, original.id, {
+                ...definition,
+                ...metadata,
+                baseUrl: "https://unconfigured.invalid",
+              }),
+              /configured pipeline URL/,
+            );
+            const duplicate = await evolveDecisionPipeline(
+              user.githubId,
+              original.id,
+              { ...definition, ...metadata },
+            );
+            assert.notEqual(duplicate.id, original.id);
+            assert.equal(
+              (await ensureDecisionPipeline(user, definition)).pipeline.id,
+              original.id,
+            );
+
+            const edited = pipelineDefinitionSchema.parse({
+              ...definition,
+              model: "promoted-model",
+              questions: {
+                ...definition.questions,
+                topic: {
+                  type: "choice",
+                  instructions: "Updated instructions",
+                  criteria: { yes: "Relevant", no: "Unrelated" },
+                },
+              },
+            });
+            const revised = await evolveDecisionPipeline(
+              user.githubId,
+              duplicate.id,
+              { ...edited, ...metadata },
+            );
+            const standalone = await evolveDecisionPipeline(
+              user.githubId,
+              original.id,
+              {
+                ...edited,
+                ...metadata,
+                questions: {
+                  one: { type: "noul", instructions: "Is it valid?" },
+                },
+              },
+            );
+            const versions = await listPipelineVersions(user.githubId);
+            assert.equal(
+              versions.find(({ id }) => id === revised.id)
+                ?.primaryGroupedPipelineId,
+              original.id,
+            );
+            assert.equal(
+              versions.find(({ id }) => id === standalone.id)
+                ?.primaryGroupedPipelineId,
+              standalone.id,
+            );
+            await assert.rejects(
+              promoteDecisionPipeline(other.githubId, revised.id),
+            );
+            await promoteDecisionPipeline(user.githubId, revised.id);
+            const group = (await rowsFor(user)).filter(
+              ({ id }) => id !== standalone.id,
+            );
+            assert.ok(
+              group.every(
+                ({ primaryGroupedPipelineId }) =>
+                  primaryGroupedPipelineId === revised.id,
+              ),
+            );
+            assert.equal((await replay(original.id, secret)).status, 200);
+            assert.deepEqual(calls[0]?.body, {
+              ...input,
+              ...{
+                model: edited.model,
+                questions: edited.questions,
+                state: { text: "Replay state" },
+              },
+            });
+            assert.equal(
+              (await post(`/api${systemOneRoutes.decide.path}`, input, secret))
+                .status,
+              200,
+            );
+            assert.deepEqual(calls[1]?.body, {
+              ...input,
+              model: edited.model,
+              questions: edited.questions,
+            });
+            assert.equal((await replay(original.id, secret, true)).status, 200);
+            assert.deepEqual(calls[2]?.body, {
+              ...input,
+              state: { text: "Replay state" },
+            });
           },
         );
       } finally {

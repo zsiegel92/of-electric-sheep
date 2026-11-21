@@ -3,7 +3,7 @@ import { useState } from "react";
 import type { z } from "zod";
 import type { PipelineQuestion } from "@/lib/decisions/question-links";
 import type { systemOneResponse } from "@/lib/system-one/typesafe-api-schemas";
-import { CopyButton } from "./copy-button";
+import { AlignedJsonColumns, jsonProperty } from "./aligned-json-columns";
 import { ViewModeSwitch } from "./view-mode-switch";
 
 type Answers = z.output<typeof systemOneResponse>["answers"];
@@ -62,47 +62,7 @@ function QuestionJsonColumns({
   if (answers)
     columns.push({ label: "Answers", rows: jsonRows(answers, names) });
 
-  const gridColumns = answers ? "grid-cols-2" : "grid-cols-1";
-  return (
-    <div className="overflow-hidden rounded-lg border bg-background">
-      <div className={`grid divide-x border-b bg-muted ${gridColumns}`}>
-        {columns.map(({ label, rows }) => (
-          <div
-            key={label}
-            className="flex min-w-0 flex-wrap items-center justify-between gap-2 px-3 py-2"
-          >
-            <span className="text-sm font-medium">{label}</span>
-            <CopyButton
-              label={`Copy ${label.toLowerCase()} JSON`}
-              value={rows
-                .map(({ text }) => text)
-                .filter(Boolean)
-                .join("\n")}
-            />
-          </div>
-        ))}
-      </div>
-      <div className={`grid divide-x ${gridColumns}`}>
-        {columns.map(({ label, rows }) => (
-          // Each column stays contiguous in the DOM for native text selection.
-          <pre
-            key={label}
-            className="grid min-w-0 cursor-text select-text grid-rows-subgrid whitespace-pre-wrap wrap-anywhere py-2 font-mono text-xs sm:text-sm"
-            style={{ gridRow: `1 / span ${rows.length}` }}
-          >
-            {rows.map(({ key, text }, index) => (
-              <span
-                key={key}
-                className={`block px-3 ${index > 1 && index < rows.length - 1 ? "border-t border-border/60" : ""}`}
-              >
-                {text}
-              </span>
-            ))}
-          </pre>
-        ))}
-      </div>
-    </div>
-  );
+  return <AlignedJsonColumns columns={columns} />;
 }
 
 function jsonRows(values: Record<string, unknown>, names: string[]) {
@@ -112,7 +72,7 @@ function jsonRows(values: Record<string, unknown>, names: string[]) {
     ...names.map((name) => ({
       key: `entry:${name}`,
       text: Object.hasOwn(values, name)
-        ? `  ${JSON.stringify(name)}: ${JSON.stringify(values[name], null, 2).replaceAll("\n", "\n  ")}${name === last ? "" : ","}`
+        ? `${jsonProperty(name, values[name], 1)}${name === last ? "" : ","}`
         : "",
     })),
     { key: "close", text: "}" },

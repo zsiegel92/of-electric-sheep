@@ -1,13 +1,21 @@
+import { createHash } from "node:crypto";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { processStoredDecision } from "@/lib/decisions/decide";
+import { pipelineDraftSchema } from "@/lib/decisions/pipeline-draft";
 import {
+  editablePipelineBaseUrls,
+  evolveDecisionPipeline,
   listPipelineVersions,
+  promoteDecisionPipeline,
   saveQuestionLinks,
   updatePipelineMetadata,
 } from "@/lib/decisions/queries";
-import { pipelineQuestionKinds } from "@/lib/decisions/question-links";
+import {
+  pipelineQuestionKinds,
+  questionAnswerShapes,
+} from "@/lib/decisions/question-links";
 import { systemOneRequest } from "@/lib/system-one/typesafe-api-schemas";
 
 const id = z.uuid().transform((value) => value.toLowerCase());
@@ -19,6 +27,11 @@ export const listPipelines = createServerFn().handler(async ({ context }) => {
       ...pipeline,
       questionCount: questions.length,
       comparabilityKey: pipelineQuestionKinds(questions),
+      linkShapeKey: questions.length
+        ? createHash("sha256")
+            .update(questionAnswerShapes(questions))
+            .digest("hex")
+        : null,
     }),
   );
 });
@@ -44,6 +57,29 @@ export const getPipelineQuestions = createServerFn()
     if (!pipeline) throw new Error("Pipeline not found.");
     return pipeline.questions;
   });
+
+export const getEditablePipelineBaseUrls = createServerFn().handler(
+  ({ context }) => {
+    requireUser(context.user);
+    return editablePipelineBaseUrls();
+  },
+);
+
+export const evolvePipeline = createServerFn({ method: "POST" })
+  .validator(z.object({ sourceId: id, draft: pipelineDraftSchema }))
+  .handler(({ data, context }) =>
+    evolveDecisionPipeline(
+      requireUser(context.user).githubId,
+      data.sourceId,
+      data.draft,
+    ),
+  );
+
+export const makePipelinePrimary = createServerFn({ method: "POST" })
+  .validator(id)
+  .handler(({ data, context }) =>
+    promoteDecisionPipeline(requireUser(context.user).githubId, data),
+  );
 
 export const updatePipeline = createServerFn({ method: "POST" })
   .validator(

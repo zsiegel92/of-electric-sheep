@@ -39,12 +39,18 @@ export function compatibleQuestions(
   version: PipelineVersion,
   primary: PipelineVersion,
 ) {
-  const shapes = (pipeline: PipelineVersion) =>
-    pipeline.questions
-      .map(({ answerShape }) => answerShape)
-      .sort()
-      .join();
-  return version.questions.length > 0 && shapes(version) === shapes(primary);
+  return (
+    version.questions.length > 0 &&
+    questionAnswerShapes(version.questions) ===
+      questionAnswerShapes(primary.questions)
+  );
+}
+
+export function questionAnswerShapes(questions: PipelineQuestion[]) {
+  return questions
+    .map(({ answerShape }) => answerShape)
+    .sort()
+    .join();
 }
 
 export function matchQuestions(

@@ -1,5 +1,10 @@
 import { useMutation } from "@tanstack/react-query";
-import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import {
+  createFileRoute,
+  Link,
+  notFound,
+  useRouter,
+} from "@tanstack/react-router";
 import { Tabs } from "radix-ui";
 import { useState } from "react";
 import { z } from "zod";
@@ -16,7 +21,11 @@ import { exactPipelineHeader } from "@/lib/system-one/type-helpers";
 import { systemOneRequest } from "@/lib/system-one/typesafe-api-schemas";
 import { typeSafeDecisionPath } from "@/lib/typesafe-api/paths";
 import { getTypeSafeApiBaseUrl } from "@/server/functions";
-import { getPipelineVersions, runStoredPipeline } from "@/server/pipelines";
+import {
+  getPipelineVersions,
+  makePipelinePrimary,
+  runStoredPipeline,
+} from "@/server/pipelines";
 import { systemOneRoutes } from "@/server/system-one/routes";
 
 const testTab = z.enum(["ui", "typesafe-curl", "pipeline-curl"]);
@@ -67,6 +76,7 @@ function PipelineRunner({
 }) {
   const { exact, test } = Route.useSearch();
   const navigate = Route.useNavigate();
+  const router = useRouter();
   const [error, setError] = useState("");
   const [stateText, setStateText] = useState("");
   const [structured, setStructured] = useState(false);
@@ -74,6 +84,10 @@ function PipelineRunner({
   const [usePipelineBaseUrl, setUsePipelineBaseUrl] = useState(true);
   const [stateFromFile, setStateFromFile] = useState(false);
   const run = useMutation({ mutationFn: runStoredPipeline });
+  const promote = useMutation({
+    mutationFn: makePipelinePrimary,
+    onSuccess: () => router.invalidate(),
+  });
   const isVersion = pipeline.id !== pipeline.primaryGroupedPipelineId;
   const example =
     !stateFromFile && test && test !== "ui" && stateText
@@ -119,6 +133,37 @@ function PipelineRunner({
           >
             Compare with primary
           </Link>
+        )}
+        {pipeline.options && (
+          <div className="flex flex-wrap items-center gap-2">
+            <Button asChild variant="outline">
+              <Link
+                to="/pipelines/$id/duplicate"
+                params={{ id: pipeline.id }}
+                search={{}}
+              >
+                Evolve (duplicate and edit)
+              </Link>
+            </Button>
+            {isVersion ? (
+              <Button
+                type="button"
+                disabled={promote.isPending}
+                onClick={() => promote.mutate({ data: pipeline.id })}
+              >
+                {promote.isPending ? "Updating…" : "Make primary"}
+              </Button>
+            ) : (
+              <span className="text-sm text-muted-foreground">
+                Primary version
+              </span>
+            )}
+          </div>
+        )}
+        {promote.error && (
+          <p role="alert" className="text-sm text-destructive">
+            {promote.error.message}
+          </p>
         )}
       </header>
       <section

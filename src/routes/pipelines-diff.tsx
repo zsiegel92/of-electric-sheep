@@ -2,7 +2,12 @@ import { useMutation } from "@tanstack/react-query";
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { z } from "zod";
+import {
+  PipelineComparison,
+  pipelineSnapshot,
+} from "@/components/pipeline-diff";
 import { Button } from "@/components/ui/button";
+import { ViewModeSwitch } from "@/components/view-mode-switch";
 import {
   compatibleQuestions,
   matchQuestions,
@@ -19,10 +24,12 @@ const searchSchema = z.object({
   id1: z.uuid().optional().catch(undefined),
   id2: z.uuid().optional().catch(undefined),
   showIgnored: z.boolean().optional().catch(undefined),
+  associate: z.boolean().optional().catch(undefined),
+  json: z.boolean().optional().catch(undefined),
 });
 export const Route = createFileRoute("/pipelines-diff")({
   validateSearch: searchSchema,
-  loaderDeps: ({ search }) => search,
+  loaderDeps: ({ search: { id1, id2 } }) => ({ id1, id2 }),
   loader: async ({ deps: { id1, id2 } }) => {
     const ids = [id1, id2].flatMap((id) => (id ? [id.toLowerCase()] : []));
     const [pipelines, versions] = await Promise.all([
@@ -91,13 +98,38 @@ function PipelineDiff() {
       >
         Pipelines
       </Link>
-      <h1 className="text-2xl font-semibold">Compare pipelines</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-semibold">
+          {search.associate
+            ? "Associate with a primary pipeline"
+            : "Compare pipelines"}
+        </h1>
+        <ViewModeSwitch
+          showJson={search.json === true}
+          onChange={(json) => {
+            void navigate({
+              search: (previous) => ({ ...previous, json: json || undefined }),
+              replace: true,
+            });
+          }}
+        />
+      </div>
       <div className="grid gap-3 sm:grid-cols-2">
         {(["id1", "id2"] as const).map((key, index) => {
           const current = key === "id1" ? left : right;
           const other = key === "id1" ? right : left;
           const otherKind = key === "id1" ? rightKind : leftKind;
-          const options = choices.filter(
+          const candidates =
+            search.associate && key === "id1"
+              ? choices.filter(
+                  (pipeline) =>
+                    pipeline.id === pipeline.primaryGroupedPipelineId &&
+                    pipeline.linkShapeKey ===
+                      pipelines.find((row) => row.id === right?.id)
+                        ?.linkShapeKey,
+                )
+              : choices;
+          const options = candidates.filter(
             (pipeline) =>
               pipeline.id === current?.id ||
               (other
@@ -108,10 +140,15 @@ function PipelineDiff() {
           );
           return (
             <label key={key} className="min-w-0 space-y-1 text-sm font-medium">
-              Version {index + 1}
+              {search.associate
+                ? index === 0
+                  ? "Primary pipeline"
+                  : "Pipeline to associate"
+                : `Version ${index + 1}`}
               <select
                 className="block w-full rounded-md border bg-background px-2 py-2 text-sm"
                 value={current?.id ?? ""}
+                disabled={search.associate === true && key === "id2"}
                 onChange={(event) => {
                   void navigate({
                     search: {
@@ -140,6 +177,7 @@ function PipelineDiff() {
           right={right}
           primary={anchor}
           attach={!!canAttach}
+          showJson={search.json === true}
         />
       ) : (
         <p className="text-sm text-muted-foreground">
@@ -159,11 +197,13 @@ function Comparison({
   right,
   primary,
   attach,
+  showJson,
 }: {
   left: PipelineVersion;
   right: PipelineVersion;
   primary: PipelineVersion | undefined;
   attach: boolean;
+  showJson: boolean;
 }) {
   const anchor = primary ?? left;
   const version =
@@ -196,13 +236,17 @@ function Comparison({
     const key = leftLinks.get(question.name);
     const match = key === undefined ? undefined : rightByPrimary.get(key);
     if (match) paired.add(match.name);
-    return { key: `left-${question.name}`, a: question, b: match };
+    return {
+      key: `left-${question.name}`,
+      leftName: question.name,
+      rightName: match?.name,
+    };
   });
   const rows = [
     ...pairs,
     ...right.questions
       .filter((q) => !paired.has(q.name))
-      .map((q) => ({ key: `right-${q.name}`, a: undefined, b: q })),
+      .map((q) => ({ key: `right-${q.name}`, rightName: q.name })),
   ];
   const needsLinks =
     leftLinks.size !== left.questions.length ||
@@ -320,41 +364,17 @@ function Comparison({
           ))}
         </div>
       ) : null}
-      <section className="space-y-2">
-        <h2 className="font-medium">Question differences</h2>
-        {needsLinks && (
-          <p className="text-sm text-muted-foreground">
-            Unlinked questions are shown on their own.
-          </p>
-        )}
-        {rows.map(({ key, a, b }) => {
-          const changed =
-            a?.name !== b?.name ||
-            JSON.stringify(a?.question) !== JSON.stringify(b?.question);
-          return (
-            <div
-              key={key}
-              className={`grid grid-cols-2 gap-3 rounded-lg border ${changed ? "bg-muted" : ""}`}
-            >
-              {[a, b].map((question, index) => (
-                <div
-                  key={index === 0 ? "left" : "right"}
-                  className="min-w-0 space-y-2 p-3"
-                >
-                  <h3 className="break-all text-sm font-medium">
-                    {question?.name ?? "No linked question"}
-                  </h3>
-                  {question && (
-                    <pre className="whitespace-pre-wrap break-words text-xs">
-                      {JSON.stringify(question.question, null, 2)}
-                    </pre>
-                  )}
-                </div>
-              ))}
-            </div>
-          );
-        })}
-      </section>
+      {needsLinks && (
+        <p className="text-sm text-muted-foreground">
+          Unlinked questions are shown on their own.
+        </p>
+      )}
+      <PipelineComparison
+        left={pipelineSnapshot(left)}
+        right={pipelineSnapshot(right)}
+        pairs={rows}
+        showJson={showJson}
+      />
     </div>
   );
 }
