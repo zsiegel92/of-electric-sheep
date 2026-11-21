@@ -2,7 +2,9 @@ import { useMutation } from "@tanstack/react-query";
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useState } from "react";
 import { z } from "zod";
+import { PipelineQuestions } from "@/components/pipeline-questions";
 import { Button } from "@/components/ui/button";
+import { pipelineQuestionKinds } from "@/lib/decisions/question-links";
 import { systemOneRequest } from "@/lib/system-one/typesafe-api-schemas";
 import { getPipelineVersions, runStoredPipeline } from "@/server/pipelines";
 
@@ -11,22 +13,31 @@ export const Route = createFileRoute("/pipelines/$id")({
   loader: async ({ params }) => {
     const id = z.uuid().safeParse(params.id.toLowerCase());
     if (!id.success) throw notFound();
-    const pipeline = (await getPipelineVersions({ data: [id.data] })).find(
-      (version) => version.id === id.data,
-    );
+    const versions = await getPipelineVersions({ data: [id.data] });
+    const pipeline = versions.find((version) => version.id === id.data);
     if (!pipeline) throw notFound();
-    return pipeline;
+    const primary = versions.find(
+      (version) => version.id === pipeline.primaryGroupedPipelineId,
+    );
+    const kinds = pipelineQuestionKinds(pipeline.questions);
+    return {
+      pipeline,
+      canCompareWithPrimary:
+        !!primary &&
+        !!kinds &&
+        kinds === pipelineQuestionKinds(primary.questions),
+    };
   },
   component: PipelinePage,
 });
 
 function PipelinePage() {
-  const pipeline = Route.useLoaderData();
+  const { pipeline } = Route.useLoaderData();
   return <PipelineRunner key={pipeline.id} />;
 }
 
 function PipelineRunner() {
-  const pipeline = Route.useLoaderData();
+  const { pipeline, canCompareWithPrimary } = Route.useLoaderData();
   const { exact } = Route.useSearch();
   const navigate = Route.useNavigate();
   const [error, setError] = useState("");
@@ -34,22 +45,23 @@ function PipelineRunner() {
   const isVersion = pipeline.id !== pipeline.primaryGroupedPipelineId;
 
   return (
-    <main className="mx-auto max-w-4xl space-y-6 py-8">
+    <main className="mx-auto max-w-5xl space-y-6 py-8">
       <Link to="/pipelines" className="text-sm underline">
         Pipelines
       </Link>
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold">
-          {pipeline.model ?? "Definition pending"}
+          {pipeline.displayName ?? pipeline.model ?? "Definition pending"}
         </h1>
         <p className="break-all font-mono text-sm text-muted-foreground">
           {pipeline.id}
         </p>
         <p className="break-all text-sm text-muted-foreground">
+          {pipeline.displayName && pipeline.model && `${pipeline.model} · `}
           {pipeline.questions.length} questions ·{" "}
           {pipeline.baseUrl ?? "Default upstream"}
         </p>
-        {isVersion && (
+        {isVersion && canCompareWithPrimary && (
           <Link
             to="/pipelines-diff"
             search={{
@@ -105,7 +117,12 @@ function PipelineRunner() {
         </label>
         <div className="flex flex-wrap gap-4 text-sm">
           <label className="flex items-center gap-2">
-            <input type="checkbox" name="json" /> Parse state as JSON
+            <input
+              type="checkbox"
+              name="json"
+              aria-describedby="state-format-help"
+            />{" "}
+            Send structured JSON
           </label>
           {isVersion && (
             <label className="flex items-center gap-2">
@@ -114,7 +131,9 @@ function PipelineRunner() {
                 checked={exact === true}
                 onChange={(event) => {
                   void navigate({
-                    search: { exact: event.currentTarget.checked || undefined },
+                    search: {
+                      exact: event.currentTarget.checked || undefined,
+                    },
                     replace: true,
                   });
                 }}
@@ -123,6 +142,10 @@ function PipelineRunner() {
             </label>
           )}
         </div>
+        <p id="state-format-help" className="text-xs text-muted-foreground">
+          Use JSON to send an object or array as state. Leave unchecked to send
+          your input as text.
+        </p>
         <Button type="submit" disabled={run.isPending || !pipeline.model}>
           {run.isPending ? "Running…" : "Run decision"}
         </Button>
@@ -132,33 +155,28 @@ function PipelineRunner() {
           </p>
         )}
       </form>
-      {run.data && (
-        <section className="space-y-2">
-          <h2 className="font-medium">Decision output</h2>
-          <pre className="overflow-auto rounded-lg border bg-muted p-4 text-sm">
-            {JSON.stringify(run.data, null, 2)}
-          </pre>
-        </section>
-      )}
-      {pipeline.questions.length > 0 && (
-        <details className="rounded-lg border p-4">
-          <summary className="cursor-pointer text-sm font-medium">
+      <section className="space-y-3" aria-labelledby="pipeline-questions">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 id="pipeline-questions" className="font-medium">
             Questions in this version
-          </summary>
-          <pre className="mt-3 overflow-auto text-sm">
-            {JSON.stringify(
-              Object.fromEntries(
-                pipeline.questions.map(({ name, question }) => [
-                  name,
-                  question,
-                ]),
-              ),
-              null,
-              2,
-            )}
-          </pre>
-        </details>
-      )}
+          </h2>
+          <p role="status" className="text-xs text-muted-foreground">
+            {run.isPending
+              ? "Waiting for answers…"
+              : run.data
+                ? `${run.data.model} · ${run.data.usage.input_tokens} input tokens · ${run.data.usage.output_tokens} output tokens`
+                : ""}
+          </p>
+        </div>
+        {pipeline.questions.length ? (
+          <PipelineQuestions
+            questions={pipeline.questions}
+            answers={run.data?.answers}
+          />
+        ) : (
+          <p className="text-sm text-muted-foreground">Definition pending.</p>
+        )}
+      </section>
     </main>
   );
 }

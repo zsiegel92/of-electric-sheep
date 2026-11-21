@@ -7,6 +7,7 @@ import {
   compatibleQuestions,
   matchQuestions,
   type PipelineVersion,
+  pipelineQuestionKinds,
 } from "@/lib/decisions/question-links";
 import {
   getPipelineVersions,
@@ -17,6 +18,7 @@ import {
 const searchSchema = z.object({
   id1: z.uuid().optional().catch(undefined),
   id2: z.uuid().optional().catch(undefined),
+  showIgnored: z.boolean().optional().catch(undefined),
 });
 export const Route = createFileRoute("/pipelines-diff")({
   validateSearch: searchSchema,
@@ -41,12 +43,32 @@ function PipelineDiff() {
   const { pipelines, left, right, versions } = Route.useLoaderData();
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
+  const choices = pipelines.filter(
+    (pipeline) =>
+      pipeline.comparabilityKey !== null &&
+      (search.showIgnored ||
+        !pipeline.uiIgnored ||
+        pipeline.id === left?.id ||
+        pipeline.id === right?.id),
+  );
+  const leftKind = left && pipelineQuestionKinds(left.questions);
+  const rightKind = right && pipelineQuestionKinds(right.questions);
+  const comparable = !!leftKind && leftKind === rightKind;
+  const choicesByKind = Map.groupBy(
+    choices,
+    (pipeline) => pipeline.comparabilityKey,
+  );
   const sameGroup =
     left &&
     right &&
     left.primaryGroupedPipelineId === right.primaryGroupedPipelineId;
   const primary = sameGroup
-    ? versions.find(({ id }) => id === left.primaryGroupedPipelineId)
+    ? versions.find(
+        (version) =>
+          version.id === left.primaryGroupedPipelineId &&
+          compatibleQuestions(left, version) &&
+          compatibleQuestions(right, version),
+      )
     : undefined;
   const canAttach =
     left &&
@@ -54,6 +76,7 @@ function PipelineDiff() {
     !sameGroup &&
     left.id === left.primaryGroupedPipelineId &&
     right.id === right.primaryGroupedPipelineId &&
+    compatibleQuestions(left, right) &&
     !pipelines.some(
       (p) => p.id !== right.id && p.primaryGroupedPipelineId === right.id,
     );
@@ -61,42 +84,58 @@ function PipelineDiff() {
 
   return (
     <main className="mx-auto max-w-5xl space-y-6 py-8">
-      <Link to="/pipelines" className="text-sm underline">
+      <Link
+        to="/pipelines"
+        search={{ showIgnored: search.showIgnored }}
+        className="text-sm underline"
+      >
         Pipelines
       </Link>
       <h1 className="text-2xl font-semibold">Compare pipelines</h1>
       <div className="grid gap-3 sm:grid-cols-2">
-        {(["id1", "id2"] as const).map((key, index) => (
-          <label key={key} className="min-w-0 space-y-1 text-sm font-medium">
-            Version {index + 1}
-            <select
-              className="block w-full rounded-md border bg-background px-2 py-2 text-sm"
-              value={search[key] ?? ""}
-              onChange={(event) => {
-                void navigate({
-                  search: {
-                    ...search,
-                    [key]: event.currentTarget.value || undefined,
-                  },
-                });
-              }}
-            >
-              <option value="">Select a pipeline</option>
-              {pipelines.map((pipeline) => (
-                <option key={pipeline.id} value={pipeline.id}>
-                  {pipeline.model ?? "Pending"} · {pipeline.id.slice(0, 8)} ·{" "}
-                  {pipeline.id === pipeline.primaryGroupedPipelineId
-                    ? "Primary"
-                    : "Version"}
-                </option>
-              ))}
-            </select>
-          </label>
-        ))}
+        {(["id1", "id2"] as const).map((key, index) => {
+          const current = key === "id1" ? left : right;
+          const other = key === "id1" ? right : left;
+          const otherKind = key === "id1" ? rightKind : leftKind;
+          const options = choices.filter(
+            (pipeline) =>
+              pipeline.id === current?.id ||
+              (other
+                ? pipeline.id !== other.id &&
+                  pipeline.comparabilityKey === otherKind
+                : (choicesByKind.get(pipeline.comparabilityKey)?.length ?? 0) >
+                  1),
+          );
+          return (
+            <label key={key} className="min-w-0 space-y-1 text-sm font-medium">
+              Version {index + 1}
+              <select
+                className="block w-full rounded-md border bg-background px-2 py-2 text-sm"
+                value={current?.id ?? ""}
+                onChange={(event) => {
+                  void navigate({
+                    search: {
+                      ...search,
+                      [key]: event.currentTarget.value || undefined,
+                    },
+                  });
+                }}
+              >
+                <option value="">Select a pipeline</option>
+                {options.map((pipeline) => (
+                  <option key={pipeline.id} value={pipeline.id}>
+                    {pipeline.displayName ?? pipeline.model ?? "Pending"} ·{" "}
+                    {pipeline.id.slice(0, 8)} · {pipeline.comparabilityKey}
+                  </option>
+                ))}
+              </select>
+            </label>
+          );
+        })}
       </div>
-      {left && right && left.id !== right.id && anchor ? (
+      {left && right && left.id !== right.id && comparable ? (
         <Comparison
-          key={`${left.id}/${right.id}/${anchor.id}`}
+          key={`${left.id}/${right.id}/${anchor?.id ?? ""}`}
           left={left}
           right={right}
           primary={anchor}
@@ -107,7 +146,7 @@ function PipelineDiff() {
           {search.id1 && search.id2 && !(left && right)
             ? "One or both pipelines were not found."
             : left && right && left.id !== right.id
-              ? "Choose versions from the same group. To link a standalone pipeline, select the intended primary first."
+              ? "Choose pipelines with the same number of questions of each type."
               : "Select two different pipelines to compare."}
         </p>
       )}
@@ -123,13 +162,18 @@ function Comparison({
 }: {
   left: PipelineVersion;
   right: PipelineVersion;
-  primary: PipelineVersion;
+  primary: PipelineVersion | undefined;
   attach: boolean;
 }) {
+  const anchor = primary ?? left;
   const version =
-    left.id === primary.id ? right : right.id === primary.id ? left : undefined;
+    left.id === primary?.id
+      ? right
+      : right.id === primary?.id
+        ? left
+        : undefined;
   const [draft, setDraft] = useState(() =>
-    version ? matchQuestions(version, primary) : new Map<string, string>(),
+    version ? matchQuestions(version, anchor) : new Map<string, string>(),
   );
   const router = useRouter();
   const save = useMutation({
@@ -138,9 +182,9 @@ function Comparison({
   });
 
   const leftLinks =
-    version?.id === left.id ? draft : matchQuestions(left, primary);
+    version?.id === left.id ? draft : matchQuestions(left, anchor, !primary);
   const rightLinks =
-    version?.id === right.id ? draft : matchQuestions(right, primary);
+    version?.id === right.id ? draft : matchQuestions(right, anchor, !primary);
   const rightByPrimary = new Map(
     right.questions.flatMap((question) => {
       const key = rightLinks.get(question.name);
@@ -160,7 +204,6 @@ function Comparison({
       .filter((q) => !paired.has(q.name))
       .map((q) => ({ key: `right-${q.name}`, a: undefined, b: q })),
   ];
-  const compatible = version && compatibleQuestions(version, primary);
   const needsLinks =
     leftLinks.size !== left.questions.length ||
     rightLinks.size !== right.questions.length;
@@ -179,12 +222,13 @@ function Comparison({
               search={{}}
               className="font-medium underline"
             >
-              {pipeline.model ?? "Definition pending"}
+              {pipeline.displayName ?? pipeline.model ?? "Definition pending"}
             </Link>
             <p className="break-all font-mono text-xs text-muted-foreground">
               {pipeline.id}
             </p>
             <p className="break-all">
+              {pipeline.displayName && pipeline.model && `${pipeline.model} · `}
               {pipeline.baseUrl ?? "Default upstream"}
             </p>
             <p className="break-all text-xs text-muted-foreground">
@@ -194,92 +238,75 @@ function Comparison({
           </div>
         ))}
       </div>
-      {version ? (
+      {version && primary ? (
         <section className="space-y-3 rounded-lg border p-4">
           <h2 className="font-medium">Question links</h2>
-          {!compatible ? (
-            <p className="text-sm text-muted-foreground">
-              These versions need the same set of answer shapes to link. Choice
-              keys and score rubric lengths must match.
+          <div className="grid gap-2 sm:grid-cols-2">
+            {version.questions.map((question) => (
+              <label key={question.name} className="min-w-0 space-y-1 text-sm">
+                <span className="break-all font-medium">{question.name}</span>
+                <select
+                  className="block w-full rounded-md border bg-background px-2 py-2 text-sm"
+                  value={draft.get(question.name) ?? ""}
+                  onChange={(event) => {
+                    save.reset();
+                    const value = event.currentTarget.value;
+                    setDraft((current) => {
+                      const next = new Map(
+                        [...current].filter(
+                          ([name, target]) =>
+                            name !== question.name && target !== value,
+                        ),
+                      );
+                      if (value) next.set(question.name, value);
+                      return next;
+                    });
+                  }}
+                >
+                  <option value="">Choose primary question</option>
+                  {primary.questions
+                    .filter(
+                      (target) => target.answerShape === question.answerShape,
+                    )
+                    .map((target) => (
+                      <option key={target.name} value={target.name}>
+                        {target.name}
+                      </option>
+                    ))}
+                </select>
+              </label>
+            ))}
+          </div>
+          <Button
+            type="button"
+            disabled={draft.size !== version.questions.length || save.isPending}
+            onClick={() =>
+              save.mutate({
+                data: {
+                  pipelineId: version.id,
+                  primaryPipelineId: primary.id,
+                  links: [...draft].map(([name, primaryName]) => ({
+                    name,
+                    primaryName,
+                  })),
+                },
+              })
+            }
+          >
+            {attach ? "Link to primary" : "Save links"}
+          </Button>
+          {save.error && (
+            <p role="alert" className="text-sm text-destructive">
+              {save.error.message}
             </p>
-          ) : (
-            <>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {version.questions.map((question) => (
-                  <label
-                    key={question.name}
-                    className="min-w-0 space-y-1 text-sm"
-                  >
-                    <span className="break-all font-medium">
-                      {question.name}
-                    </span>
-                    <select
-                      className="block w-full rounded-md border bg-background px-2 py-2 text-sm"
-                      value={draft.get(question.name) ?? ""}
-                      onChange={(event) => {
-                        save.reset();
-                        const value = event.currentTarget.value;
-                        setDraft((current) => {
-                          const next = new Map(
-                            [...current].filter(
-                              ([name, target]) =>
-                                name !== question.name && target !== value,
-                            ),
-                          );
-                          if (value) next.set(question.name, value);
-                          return next;
-                        });
-                      }}
-                    >
-                      <option value="">Choose primary question</option>
-                      {primary.questions
-                        .filter(
-                          (target) =>
-                            target.answerShape === question.answerShape,
-                        )
-                        .map((target) => (
-                          <option key={target.name} value={target.name}>
-                            {target.name}
-                          </option>
-                        ))}
-                    </select>
-                  </label>
-                ))}
-              </div>
-              <Button
-                type="button"
-                disabled={
-                  draft.size !== version.questions.length || save.isPending
-                }
-                onClick={() =>
-                  save.mutate({
-                    data: {
-                      pipelineId: version.id,
-                      primaryPipelineId: primary.id,
-                      links: [...draft].map(([name, primaryName]) => ({
-                        name,
-                        primaryName,
-                      })),
-                    },
-                  })
-                }
-              >
-                {attach ? "Link to primary" : "Save links"}
-              </Button>
-              {save.error && (
-                <p role="alert" className="text-sm text-destructive">
-                  {save.error.message}
-                </p>
-              )}
-              {save.isSuccess && (
-                <p role="status" className="text-sm">
-                  Links saved.
-                </p>
-              )}
-            </>
+          )}
+          {save.isSuccess && (
+            <p role="status" className="text-sm">
+              Links saved.
+            </p>
           )}
         </section>
-      ) : (
+      ) : primary ? (
         <div className="flex flex-wrap gap-4 text-sm">
           {[left, right].map((pipeline, index) => (
             <Link
@@ -292,7 +319,7 @@ function Comparison({
             </Link>
           ))}
         </div>
-      )}
+      ) : null}
       <section className="space-y-2">
         <h2 className="font-medium">Question differences</h2>
         {needsLinks && (

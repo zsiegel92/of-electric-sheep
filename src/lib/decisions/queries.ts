@@ -121,6 +121,8 @@ export async function listPipelineVersions(
     .select({
       id: decisionPipelines.id,
       primaryGroupedPipelineId: decisionPipelines.primaryGroupedPipelineId,
+      displayName: decisionPipelines.displayName,
+      uiIgnored: decisionPipelines.uiIgnored,
       baseUrl: decisionPipelines.baseUrl,
       createdAt: decisionPipelines.createdAt,
       model: decisionPipelineDefinitions.model,
@@ -195,6 +197,24 @@ export async function listPipelineVersions(
     }
   }
   return [...versions.values()];
+}
+
+export async function updatePipelineMetadata(
+  userId: string,
+  pipelineId: string,
+  metadata: { displayName: string | null } | { uiIgnored: boolean },
+) {
+  const [pipeline] = await getDb()
+    .update(decisionPipelines)
+    .set(metadata)
+    .where(
+      and(
+        eq(decisionPipelines.id, pipelineId),
+        eq(decisionPipelines.userId, userId),
+      ),
+    )
+    .returning({ id: decisionPipelines.id });
+  if (!pipeline) throw new Error("Pipeline not found.");
 }
 
 export async function findPipelineVersions(

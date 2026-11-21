@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   check,
   foreignKey,
   index,
@@ -48,6 +49,8 @@ export const decisionPipelines = pgTable(
       .references(() => users.githubId, { onDelete: "cascade" }),
     definitionHash: text("definition_hash").notNull(),
     primaryGroupedPipelineId: uuid("primary_grouped_pipeline_id").notNull(),
+    displayName: text("display_name"),
+    uiIgnored: boolean("ui_ignored").notNull().default(false),
     baseUrl: text("base_url"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()

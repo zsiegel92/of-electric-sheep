@@ -5,7 +5,9 @@ import { processStoredDecision } from "@/lib/decisions/decide";
 import {
   listPipelineVersions,
   saveQuestionLinks,
+  updatePipelineMetadata,
 } from "@/lib/decisions/queries";
+import { pipelineQuestionKinds } from "@/lib/decisions/question-links";
 import { systemOneRequest } from "@/lib/system-one/typesafe-api-schemas";
 
 const id = z.uuid().transform((value) => value.toLowerCase());
@@ -16,6 +18,7 @@ export const listPipelines = createServerFn().handler(async ({ context }) => {
     ({ questions, options: _options, ...pipeline }) => ({
       ...pipeline,
       questionCount: questions.length,
+      comparabilityKey: pipelineQuestionKinds(questions),
     }),
   );
 });
@@ -28,6 +31,40 @@ export const getPipelineVersions = createServerFn()
       data,
       undefined,
       true,
+    ),
+  );
+
+export const getPipelineQuestions = createServerFn()
+  .validator(id)
+  .handler(async ({ data, context }) => {
+    const [pipeline] = await listPipelineVersions(
+      requireUser(context.user).githubId,
+      [data],
+    );
+    if (!pipeline) throw new Error("Pipeline not found.");
+    return pipeline.questions;
+  });
+
+export const updatePipeline = createServerFn({ method: "POST" })
+  .validator(
+    z.object({ pipelineId: id }).and(
+      z.union([
+        z.object({
+          displayName: z
+            .string()
+            .trim()
+            .max(100)
+            .transform((name) => name || null),
+        }),
+        z.object({ uiIgnored: z.boolean() }),
+      ]),
+    ),
+  )
+  .handler(({ data: { pipelineId, ...metadata }, context }) =>
+    updatePipelineMetadata(
+      requireUser(context.user).githubId,
+      pipelineId,
+      metadata,
     ),
   );
 

@@ -50,6 +50,13 @@
       "when": 1795217465076,
       "tag": "0006_pipeline-question-links",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1795276966491,
+      "tag": "0007_pipeline-display-settings",
+      "breakpoints": true
     }
   ]
 }
