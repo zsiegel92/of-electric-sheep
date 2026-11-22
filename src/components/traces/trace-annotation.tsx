@@ -204,12 +204,12 @@ function CorrectChoice({
   const selected = editor.saved.get(name);
   return (
     <fieldset className="min-w-0 space-y-1">
-      <legend className="sr-only">Correct choice for {name}</legend>
-      <div className="flex min-h-5 items-center justify-between gap-2">
-        <span className="text-xs font-medium text-muted-foreground">
-          Correct choice
-        </span>
-        {selected !== undefined && (
+      <legend className="sr-only">Choices for {name}</legend>
+      {selected !== undefined && (
+        <div className="flex min-h-5 items-center justify-between gap-2">
+          <span className="text-xs font-medium text-muted-foreground">
+            Correct choice
+          </span>
           <Button
             type="button"
             variant="ghost"
@@ -221,8 +221,8 @@ function CorrectChoice({
           >
             Remove label
           </Button>
-        )}
-      </div>
+        </div>
+      )}
       <div className="grid gap-1">
         {choices.map(({ key, label }) => {
           const chosen = selected === key;
