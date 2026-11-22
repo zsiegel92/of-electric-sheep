@@ -1,7 +1,22 @@
-import { Link } from "@tanstack/react-router";
-import { Activity, ListTree, SlidersHorizontal } from "lucide-react";
+import { Link, linkOptions } from "@tanstack/react-router";
+import {
+  Activity,
+  ListTree,
+  type LucideIcon,
+  SlidersHorizontal,
+} from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+
+type PipelineLinkProps = { pipelineId: string };
+
+type ViewLinkProps =
+  | (PipelineLinkProps & {
+      view: "editor" | "traces";
+      grouped?: boolean;
+      showJson?: boolean;
+    })
+  | { view: "trace"; traceId: string; showJson: boolean; grouped?: never };
 
 const views = {
   editor: {
@@ -16,9 +31,7 @@ const views = {
     label: "View Trace",
     Icon: ListTree,
   },
-} as const;
-
-type PipelineLinkProps = { pipelineId: string };
+} satisfies Record<ViewLinkProps["view"], { label: string; Icon: LucideIcon }>;
 
 export function PipelineViewLinks({
   pipelineId,
@@ -55,31 +68,26 @@ export function TraceDetailLink({
   return <ViewLink view="trace" traceId={traceId} showJson={showJson} />;
 }
 
-type ViewLinkProps =
-  | (PipelineLinkProps & {
-      view: "editor" | "traces";
-      grouped?: boolean;
-      showJson?: boolean;
-    })
-  | { view: "trace"; traceId: string; showJson: boolean; grouped?: never };
-
 function ViewLink(props: ViewLinkProps) {
   const { view, grouped } = props;
   const { label, Icon } = views[view];
   const destination =
     view === "trace"
-      ? ({
+      ? linkOptions({
           to: "/trace/$traceId",
           params: { traceId: props.traceId },
           search: { json: props.showJson || undefined },
-        } as const)
+        })
       : view === "traces"
-        ? ({
+        ? linkOptions({
             to: "/traces/$pipelineId",
             params: { pipelineId: props.pipelineId },
             search: { json: props.showJson || undefined },
-          } as const)
-        : ({ to: "/pipelines/$id", params: { id: props.pipelineId } } as const);
+          })
+        : linkOptions({
+            to: "/pipelines/$id",
+            params: { id: props.pipelineId },
+          });
   return (
     <Link
       search={{}}

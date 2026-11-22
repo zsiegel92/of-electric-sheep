@@ -29,6 +29,11 @@ const searchSchema = z.object({
   associate: z.boolean().optional().catch(undefined),
   json: z.boolean().optional().catch(undefined),
 });
+const comparisonSlots = ["id1", "id2"] as const satisfies readonly (keyof Pick<
+  z.input<typeof searchSchema>,
+  "id1" | "id2"
+>)[];
+
 export const Route = createFileRoute("/pipelines-diff")({
   validateSearch: searchSchema,
   loaderDeps: ({ search: { id1, id2 } }) => ({ id1, id2 }),
@@ -122,7 +127,7 @@ function PipelineDiff() {
         }
       />
       <div className="grid gap-3 sm:grid-cols-2">
-        {(["id1", "id2"] as const).map((key, index) => {
+        {comparisonSlots.map((key, index) => {
           const current = key === "id1" ? left : right;
           const other = key === "id1" ? right : left;
           const otherKind = key === "id1" ? rightKind : leftKind;
@@ -233,10 +238,12 @@ function Comparison({
   const rightLinks =
     version?.id === right.id ? draft : matchQuestions(right, anchor, !primary);
   const rightByPrimary = new Map(
-    right.questions.flatMap((question) => {
-      const key = rightLinks.get(question.name);
-      return key === undefined ? [] : [[key, question] as const];
-    }),
+    right.questions.flatMap<[string, PipelineVersion["questions"][number]]>(
+      (question) => {
+        const key = rightLinks.get(question.name);
+        return key === undefined ? [] : [[key, question]];
+      },
+    ),
   );
   const paired = new Set<string>();
   const pairs = left.questions.map((question) => {

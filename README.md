@@ -35,7 +35,9 @@ Ctrl-C stops the app and Inngest. `make db-stop` stops Postgres.
 
 Create an API key in the app and send it as `X-API-Key` to call System One. Decisions reuse per-user pipelines, which can point to a custom TypeSafe endpoint. Pipeline rows are created on first use; Inngest receives creation and usage events.
 
-Optional Langfuse tracing uses `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and `LANGFUSE_BASE_URL`. Traces include full requests, image attachments, decisions, and token usage. Fetch recent pipeline spans with `pnpm run script scripts/tail-spans-from-pipeline.ts <pipeline-id>`.
+Inngest saves decision traces to Postgres after each run. The trace views query Postgres, including annotation filters and confidence sorting. Fetch recent traces with `pnpm run script scripts/tail-spans-from-pipeline.ts <pipeline-id>`.
+
+Optional Langfuse export uses `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and `LANGFUSE_BASE_URL`. Set `LANGFUSE_PROJECT_ID` to include observability links on new trace records. Postgres traces contain the decision input state, answers, and usage. Raw image attachments still go to Langfuse when export is configured. If a trace exceeds the Inngest event size limit, Postgres keeps the trace metadata and marks the omitted payload.
 
 ## Checks
 

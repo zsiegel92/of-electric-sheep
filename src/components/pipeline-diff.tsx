@@ -1,5 +1,5 @@
 import { diffWordsWithSpace } from "diff";
-import { Fragment } from "react";
+import { Fragment, type ReactNode } from "react";
 import type { PipelineDraft } from "@/lib/decisions/pipeline-draft";
 import type { PipelineVersion } from "@/lib/decisions/question-links";
 import {
@@ -39,22 +39,34 @@ const fields = [
   ["baseUrl", "Upstream URL"],
   ["options", "Capabilities"],
   ["uiIgnored", "Ignored"],
-] as const;
+] as const satisfies readonly (readonly [
+  Exclude<keyof Snapshot, "questions">,
+  string,
+])[];
+
+type QuestionField = keyof Exclude<
+  PipelineDraft["questions"][string],
+  { type: "box" }
+>;
 const questionFields = [
   ["type", "Type"],
   ["instructions", "Instructions"],
   ["criteria", "Criteria"],
-] as const;
+] as const satisfies readonly (readonly [QuestionField, string])[];
 
 function display(value: unknown) {
   if (value === undefined) return "";
   return typeof value === "string" ? value : JSON.stringify(value, null, 2);
 }
 
-function wordDifference(left: string, right: string, json = false) {
+function wordDifference(
+  left: string,
+  right: string,
+  json = false,
+): [ReactNode, ReactNode] {
   if (left === right) {
     const text = json ? <JsonText text={left} /> : left;
-    return [text, text] as const;
+    return [text, text];
   }
   const changes = diffWordsWithSpace(left, right, { maxEditLength: 1500 }) ?? [
     { value: left, added: false, removed: true },
@@ -87,7 +99,7 @@ function wordDifference(left: string, right: string, json = false) {
         );
       });
   };
-  return [side(true), side(false)] as const;
+  return [side(true), side(false)];
 }
 
 function FieldDiff({

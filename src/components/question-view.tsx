@@ -18,7 +18,7 @@ const typeLabels = {
   choice: "Choice",
   score: "Score",
   box: "Bounding box",
-};
+} satisfies Record<NamedQuestion["question"]["type"], string>;
 
 const percent = new Intl.NumberFormat("en", {
   style: "percent",

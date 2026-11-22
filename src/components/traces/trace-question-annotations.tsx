@@ -6,16 +6,13 @@ import { TraceAnswer } from "./trace-annotation";
 export function TraceQuestionAnnotations({
   questions,
   answers,
-  choicesByQuestion,
 }: {
   questions: NamedQuestion[];
   answers: Answers | undefined;
   choicesByQuestion?: ReadonlyMap<string, ReturnType<typeof annotationChoices>>;
 }) {
   const items = questions.flatMap((question) => {
-    const choices = choicesByQuestion
-      ? (choicesByQuestion.get(question.name) ?? [])
-      : annotationChoices(question.question);
+    const choices = annotationChoices(question.question);
     return choices.length ? [{ question, choices }] : [];
   });
   if (!items.length) return null;

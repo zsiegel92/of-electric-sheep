@@ -18,7 +18,6 @@ import {
   questionAnswerShapes,
 } from "@/lib/decisions/question-links";
 import { systemOneRequest } from "@/lib/system-one/typesafe-api-schemas";
-import { signTraceProof } from "@/lib/traces/trace-proof";
 
 const id = z.uuid().transform((value) => value.toLowerCase());
 
@@ -156,15 +155,6 @@ export const runStoredPipeline = createServerFn({ method: "POST" })
     const { decision, pipelineId, links } = result;
     return {
       ...decision,
-      traceAnnotation: decision.traceId
-        ? {
-            pipelineId,
-            serverSignedTraceProof: signTraceProof({
-              pipelineId,
-              traceId: decision.traceId,
-            }),
-            questionLinks: links ? [...links] : [],
-          }
-        : undefined,
+      traceAnnotation: { pipelineId, questionLinks: links ? [...links] : [] },
     };
   });

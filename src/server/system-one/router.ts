@@ -17,8 +17,8 @@ import {
 import {
   modelList,
   systemOneRequest,
-  tracedSystemOneResponse,
 } from "@/lib/system-one/typesafe-api-schemas";
+import { tracedSystemOneResponse } from "@/lib/traces/schemas";
 import { routeGroup } from "../route-group";
 import { systemOneRoutes } from "./routes";
 

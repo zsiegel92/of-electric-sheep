@@ -15,7 +15,6 @@ import type {
   Usage,
 } from "@typesafe-ai/sdk";
 import { z } from "zod";
-import { traceId } from "@/lib/langfuse/schemas";
 
 const content = z.union([
   z.string(),
@@ -182,12 +181,6 @@ export const systemOneResponse = z.object({
     .describe("At least one answer, keyed by the input question names."),
   usage,
 }) satisfies z.ZodType<TypeSafeDecisionResponse>;
-
-export const tracedSystemOneResponse = systemOneResponse.extend({
-  traceId: traceId
-    .optional()
-    .describe("OpenTelemetry trace ID, when tracing is configured."),
-});
 
 const modelCard = z.object({
   name: named.describe("Model name or alias accepted by System One."),

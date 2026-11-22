@@ -13,7 +13,7 @@ import {
 import { TraceQuestionAnnotations } from "@/components/traces/trace-question-annotations";
 import { TraceTime } from "@/components/traces/trace-table";
 import { ViewModeSwitch } from "@/components/view-mode-switch";
-import { traceId } from "@/lib/langfuse/schemas";
+import { traceId } from "@/lib/traces/schemas";
 import { getDecisionTrace } from "@/server/traces";
 
 export const Route = createFileRoute("/trace/$traceId")({
@@ -30,17 +30,13 @@ export const Route = createFileRoute("/trace/$traceId")({
 
 function TraceDetail() {
   const { json = false } = Route.useSearch();
-  const { pipeline, trace, questions, annotations, annotationQuestions } =
-    Route.useLoaderData();
-  const choicesByQuestion = new Map(
-    annotationQuestions.map(({ name, choices }) => [name, choices]),
-  );
+  const { pipeline, trace, questions } = Route.useLoaderData();
   return (
     <TraceAnnotationEditor
       key={trace.traceId}
       pipelineId={pipeline.id}
       traceId={trace.traceId}
-      annotations={annotations}
+      annotations={trace.annotations}
     >
       <div className="space-y-6">
         <div className="space-y-1">
@@ -77,6 +73,16 @@ function TraceDetail() {
             showJson={json}
           />
         )}
+        {trace.historicalPlaceholder && (
+          <p className="text-sm text-muted-foreground">
+            Only the saved labels are available for this historical trace.
+          </p>
+        )}
+        {trace.payloadTruncated && (
+          <p className="text-sm text-muted-foreground">
+            Some trace data exceeded the event size limit.
+          </p>
+        )}
         {!trace.answers && (
           <p className="text-sm text-muted-foreground">
             No decision output available.
@@ -87,17 +93,12 @@ function TraceDetail() {
           answers={trace.answers}
           showJson={json}
           renderAnswer={(question, answer) => (
-            <TraceAnswer
-              {...question}
-              answer={answer}
-              choices={choicesByQuestion.get(question.name) ?? []}
-            />
+            <TraceAnswer {...question} answer={answer} />
           )}
           jsonFooter={
             <TraceQuestionAnnotations
               questions={questions}
               answers={trace.answers}
-              choicesByQuestion={choicesByQuestion}
             />
           }
         />

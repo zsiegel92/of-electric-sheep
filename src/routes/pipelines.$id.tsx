@@ -1,4 +1,9 @@
-import { useMutation } from "@tanstack/react-query";
+import {
+  skipToken,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import {
   createFileRoute,
   Link,
@@ -6,7 +11,7 @@ import {
   useRouter,
 } from "@tanstack/react-router";
 import { Tabs } from "radix-ui";
-import { useState } from "react";
+import { type ComponentProps, useState } from "react";
 import { z } from "zod";
 import { CurlPreview } from "@/components/curl-preview";
 import { PageHeader } from "@/components/page-header";
@@ -42,6 +47,7 @@ import {
   runStoredPipeline,
 } from "@/server/pipelines";
 import { systemOneRoutes } from "@/server/system-one/routes";
+import { getStoredTraceAnnotations } from "@/server/traces";
 
 const testTab = z.enum(["ui", "typesafe-curl", "pipeline-curl"]);
 
@@ -121,7 +127,10 @@ function PipelineRunner({
       example?.success === false
         ? "The command uses a placeholder because the state in Test in UI is invalid."
         : undefined,
-  };
+  } satisfies Pick<
+    ComponentProps<typeof CurlPreview>,
+    "stateFromFile" | "setStateFromFile" | "hasStatePlaceholder" | "notice"
+  >;
   const routing = exact === true ? { [exactPipelineHeader]: "true" } : {};
 
   return (
@@ -393,10 +402,53 @@ function PipelineTestQuestions({
   );
   const traceId = result?.traceId;
   const annotation = result?.traceAnnotation;
-  if (!traceId || !annotation) {
+  const queryClient = useQueryClient();
+  const queryKey = [
+    "stored-trace-annotations",
+    annotation?.pipelineId,
+    traceId,
+  ];
+  const storedAnnotations = useQuery({
+    queryKey,
+    queryFn:
+      traceId && annotation
+        ? () =>
+            getStoredTraceAnnotations({
+              data: { pipelineId: annotation.pipelineId, traceId },
+            })
+        : skipToken,
+    refetchInterval: ({ state }) =>
+      state.data === null && state.dataUpdateCount < 15 ? 1000 : false,
+    retry: false,
+    staleTime: Infinity,
+  });
+  const annotations = storedAnnotations.data;
+  const stillPending =
+    storedAnnotations.isError ||
+    (!storedAnnotations.isFetching &&
+      (queryClient.getQueryState(queryKey)?.dataUpdateCount ?? 0) >= 15);
+  if (!traceId || !annotation || !annotations) {
     return (
       <div className="space-y-3">
-        {viewMode}
+        <div className="flex flex-wrap items-center gap-2">
+          {viewMode}
+          {traceId && (
+            <p role="status" className="text-xs text-muted-foreground">
+              {stillPending ? "Trace is still pending." : "Saving trace…"}
+            </p>
+          )}
+          {traceId && stillPending && (
+            <Button
+              type="button"
+              size="xs"
+              variant="outline"
+              disabled={storedAnnotations.isFetching}
+              onClick={() => void storedAnnotations.refetch()}
+            >
+              Check again
+            </Button>
+          )}
+        </div>
         <PipelineQuestions
           pipelineId={pipelineId}
           questions={questions}
@@ -411,7 +463,7 @@ function PipelineTestQuestions({
       key={traceId}
       traceId={traceId}
       pipelineId={annotation.pipelineId}
-      serverSignedTraceProof={annotation.serverSignedTraceProof}
+      annotations={annotations}
       questionLinks={new Map(annotation.questionLinks)}
     >
       <div className="space-y-3">
@@ -443,20 +495,24 @@ function PipelineTestQuestions({
 const tabClass =
   "cursor-pointer border-b-2 border-transparent px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring data-[state=active]:border-foreground data-[state=active]:text-foreground";
 
-function parseState(text: string, structured: boolean) {
+type ParseStateResult =
+  | { success: true; state: z.output<typeof systemOneRequest.shape.state> }
+  | { success: false; error: string };
+
+function parseState(text: string, structured: boolean): ParseStateResult {
   let value: unknown = text;
   if (structured) {
     try {
       value = JSON.parse(text);
     } catch {
-      return { success: false, error: "Enter valid JSON." } as const;
+      return { success: false, error: "Enter valid JSON." };
     }
   }
   const result = systemOneRequest.shape.state.safeParse(value);
   return result.success
-    ? ({ success: true, state: result.data } as const)
-    : ({
+    ? { success: true, state: result.data }
+    : {
         success: false,
         error: "State must be text, a JSON object, or a JSON array.",
-      } as const);
+      };
 }

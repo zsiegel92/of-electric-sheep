@@ -1,4 +1,4 @@
-import { ORPCError } from "@orpc/server";
+import { type ErrorMap, ORPCError } from "@orpc/server";
 import { Image, type SystemOneRequest } from "@typesafe-ai/sdk";
 import { z } from "zod";
 import type { RouteRequestBody } from "@/server/route-group";
@@ -49,7 +49,7 @@ export const typesafeErrors = {
   TOO_MANY_REQUESTS: { message: "TypeSafe rate limit reached" },
   BAD_GATEWAY: { message: "TypeSafe returned an unexpected response" },
   SERVICE_UNAVAILABLE: { message: "TypeSafe credentials are not configured" },
-};
+} satisfies ErrorMap;
 
 const state =
   "The parcel arrived two days late, but the customer is satisfied with the replacement.";

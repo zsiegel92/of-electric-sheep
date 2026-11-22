@@ -1,8 +1,9 @@
 import "@tanstack/react-start/server-only";
+import { randomBytes } from "node:crypto";
 import { ORPCError } from "@orpc/server";
 import type { User } from "@/lib/auth";
 import { inngest } from "@/lib/inngest/inngest";
-import { decisionObservationName } from "@/lib/langfuse/schemas";
+import { getObservabilityUrl } from "@/lib/langfuse/links";
 import { traceGeneration } from "@/lib/langfuse/tracing";
 import { runDecision } from "@/lib/system-one/system-one-api-client";
 import {
@@ -14,13 +15,31 @@ import {
   type SystemOneCoreIngredients,
   toSystemOneTraceInput,
 } from "@/lib/system-one/type-helpers";
-import { newPipelineUsed, pipelineUsed } from "./events";
+import {
+  decisionObservationName,
+  type TraceRecord,
+} from "@/lib/traces/schemas";
+import {
+  decisionTraceCompleted,
+  newPipelineUsed,
+  type PipelineUsage,
+  pipelineUsed,
+} from "./events";
 import {
   type PipelineDefinition,
   pipelineDefinitionSchema,
 } from "./pipeline-schemas";
 import { ensureDecisionPipeline, findPipelineVersions } from "./queries";
 import { matchQuestions, type PipelineVersion } from "./question-links";
+
+// Leave room for the event envelope on Inngest plans with a 256 KiB limit.
+const TRACE_EVENT_BUDGET_BYTES = 255 * 1024;
+
+function tracePayloadFitsInEventBudget(
+  payload: ReturnType<typeof decisionTraceCompleted.create>,
+) {
+  return Buffer.byteLength(JSON.stringify(payload)) <= TRACE_EVENT_BUDGET_BYTES;
+}
 
 export async function processDecision(
   input: DecisionInputBody,
@@ -57,48 +76,109 @@ async function runPipeline(
   user: User,
   pipeline: { id: string; baseUrl: string | null; hasDefinition: boolean },
   definition: PipelineDefinition,
-): Promise<Awaited<ReturnType<typeof runDecision>> & { traceId?: string }> {
-  const { result, traceId } = await traceGeneration(
-    decisionObservationName,
-    { pipelineId: pipeline.id },
-    async (generation) => {
-      if (generation) {
-        generation.update({
-          model: ingredients.model,
-          input: await toSystemOneTraceInput(ingredients),
+): Promise<Awaited<ReturnType<typeof runDecision>> & { traceId: string }> {
+  const traceId = randomBytes(16).toString("hex");
+  const trace = {
+    pipelineId: pipeline.id,
+    traceId,
+    startedAt: new Date().toISOString(),
+    state: ingredients.state,
+  } satisfies Pick<
+    TraceRecord,
+    "pipelineId" | "traceId" | "startedAt" | "state"
+  >;
+  let observabilityUrl: string | undefined;
+  let decision: Awaited<ReturnType<typeof runDecision>>;
+  try {
+    decision = await traceGeneration(
+      decisionObservationName,
+      { pipelineId: pipeline.id, decisionTraceId: traceId },
+      async (generation) => {
+        if (generation) {
+          observabilityUrl = getObservabilityUrl(generation.traceId);
+          generation.update({
+            model: ingredients.model,
+            input: await toSystemOneTraceInput(ingredients),
+          });
+        }
+        const usage = {
+          pipelineId: pipeline.id,
+          user,
+          definition,
+          state: ingredients.state,
+        } satisfies PipelineUsage;
+        // Republish pending definitions with a stable ID so a failed send can be retried.
+        await inngest.send([
+          ...(!pipeline.hasDefinition
+            ? [
+                newPipelineUsed.create(usage, {
+                  id: `new-pipeline-${pipeline.id}`,
+                }),
+              ]
+            : []),
+          pipelineUsed.create(usage),
+        ]);
+        const decision = await runDecision(ingredients, {
+          baseUrl: pipeline.baseUrl,
         });
-      }
-      const usage = {
-        pipelineId: pipeline.id,
-        user,
-        definition,
-        state: ingredients.state,
-      };
-      // Republish pending definitions with a stable ID so a failed send can be retried.
-      await inngest.send([
-        ...(!pipeline.hasDefinition
-          ? [
-              newPipelineUsed.create(usage, {
-                id: `new-pipeline-${pipeline.id}`,
-              }),
-            ]
-          : []),
-        pipelineUsed.create(usage),
-      ]);
-      const decision = await runDecision(ingredients, {
-        baseUrl: pipeline.baseUrl,
-      });
-      generation?.update({
-        model: decision.model,
-        usageDetails: {
-          input: decision.usage.input_tokens,
-          output: decision.usage.output_tokens,
-        },
-      });
-      return decision;
-    },
+        generation?.update({
+          model: decision.model,
+          usageDetails: {
+            input: decision.usage.input_tokens,
+            output: decision.usage.output_tokens,
+          },
+        });
+        return decision;
+      },
+    );
+  } catch (error) {
+    await publishTrace({
+      ...trace,
+      model: ingredients.model,
+      failed: true,
+      observabilityUrl,
+    }).catch((publishError) => {
+      console.error(
+        "Could not publish failed decision trace",
+        traceId,
+        publishError,
+      );
+    });
+    throw error;
+  }
+  await publishTrace({
+    ...trace,
+    ...decision,
+    failed: false,
+    observabilityUrl,
+  });
+  return { ...decision, traceId };
+}
+
+async function publishTrace(record: TraceRecord) {
+  const event = (data: TraceRecord) =>
+    decisionTraceCompleted.create(data, {
+      id: `decision-trace-${record.traceId}`,
+    });
+  const data = {
+    ...record,
+    endedAt: new Date().toISOString(),
+  } satisfies TraceRecord;
+  const full = event(data);
+  if (tracePayloadFitsInEventBudget(full)) {
+    await inngest.send(full);
+    return;
+  }
+  const summary = { ...data, payloadTruncated: true };
+  const withoutState = event({ ...summary, state: undefined });
+  const withoutAnswers = event({ ...summary, answers: undefined });
+  await inngest.send(
+    tracePayloadFitsInEventBudget(withoutState)
+      ? withoutState
+      : tracePayloadFitsInEventBudget(withoutAnswers)
+        ? withoutAnswers
+        : event({ ...summary, state: undefined, answers: undefined }),
   );
-  return traceId ? { ...result, traceId } : result;
 }
 
 async function runStoredVersion(

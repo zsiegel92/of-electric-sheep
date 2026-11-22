@@ -40,19 +40,19 @@ export async function saveUser(
     });
 }
 
+type ApiKeyRow = Pick<
+  typeof apiKeys.$inferSelect,
+  "id" | "name" | "prefix" | "createdAt"
+>;
+
 const columns = {
   id: apiKeys.id,
   name: apiKeys.name,
   prefix: apiKeys.prefix,
   createdAt: apiKeys.createdAt,
-};
+} satisfies Pick<typeof apiKeys, keyof ApiKeyRow>;
 
-function serializeKey(row: {
-  id: string;
-  name: string;
-  prefix: string;
-  createdAt: Date;
-}) {
+function serializeKey(row: ApiKeyRow) {
   return { ...row, createdAt: row.createdAt.toISOString() };
 }
 

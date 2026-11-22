@@ -9,16 +9,16 @@ import { Button } from "@/components/ui/button";
 import { ViewModeSwitch } from "@/components/view-mode-switch";
 import {
   annotationStatus,
-  rankedTraceLimit,
   traceOrder,
   traceOrders,
 } from "@/lib/traces/filters";
+import { traceId } from "@/lib/traces/schemas";
 import { listPipelineTraces } from "@/server/traces";
 
 export const Route = createFileRoute("/traces/$pipelineId")({
   validateSearch: z.object({
     json: z.boolean().optional().catch(undefined),
-    after: z.array(z.string().max(4096)).optional().catch(undefined),
+    after: z.array(traceId).optional().catch(undefined),
     until: z.iso.datetime().optional().catch(undefined),
     status: annotationStatus.optional().catch(undefined),
     order: traceOrder.optional().catch(undefined),
@@ -67,9 +67,7 @@ function PipelineTraces() {
       )}
       {!data.traces.length && (
         <p className="text-sm text-muted-foreground">
-          {data.configured
-            ? "No matching traces on this page."
-            : "Langfuse is not configured."}
+          No matching traces on this page.
         </p>
       )}
       <TracePagination next={data.next} until={data.until} />
@@ -131,8 +129,7 @@ function TraceFilters() {
       </label>
       {order !== "recent" && (
         <p className="text-xs text-muted-foreground sm:pb-2">
-          Ranks up to {rankedTraceLimit} recent results. Traces without
-          confidence appear last.
+          Traces without confidence appear last.
         </p>
       )}
     </fieldset>

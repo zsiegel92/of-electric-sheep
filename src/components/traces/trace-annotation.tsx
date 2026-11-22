@@ -35,7 +35,6 @@ export function TraceAnnotationEditor({
   pipelineId,
   traceId,
   annotations = [],
-  serverSignedTraceProof,
   questionLinks,
   finish,
   children,
@@ -43,7 +42,6 @@ export function TraceAnnotationEditor({
   pipelineId: string;
   traceId: string;
   annotations?: TraceAnnotation[];
-  serverSignedTraceProof?: string;
   questionLinks?: ReadonlyMap<string, string>;
   finish?: (() => void) | undefined;
   children: ReactNode;
@@ -77,7 +75,6 @@ export function TraceAnnotationEditor({
           traceId,
           questionName: questionLinks?.get(questionName) ?? questionName,
           choiceKey,
-          serverSignedTraceProof,
         },
       });
       update({ choiceKey });

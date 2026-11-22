@@ -1,10 +1,16 @@
-import { getPipelineSpans } from "../src/lib/langfuse/queries";
+import { z } from "zod";
+import { getDb } from "../src/lib/db/db";
+import { getPipelineTracePage } from "../src/lib/traces/queries";
 
-const pipelineId = process.argv[2];
-if (!pipelineId)
-  throw new Error(
-    "Usage: pnpm run script scripts/tail-spans-from-pipeline.ts <pipeline-id>",
+const pipelineId = z.uuid().parse(process.argv[2]);
+try {
+  console.log(
+    JSON.stringify(
+      (await getPipelineTracePage(pipelineId, {})).traces,
+      null,
+      2,
+    ),
   );
-
-// Last 10 observations from the past week, newest first.
-console.log(JSON.stringify(await getPipelineSpans(pipelineId), null, 2));
+} finally {
+  await getDb().$client.end();
+}

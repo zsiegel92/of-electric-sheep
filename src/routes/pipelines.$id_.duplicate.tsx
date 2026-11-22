@@ -59,11 +59,19 @@ type EditableDraft = Omit<PipelineDraft, "questions"> & {
 };
 const input =
   "w-full min-w-0 rounded-md border bg-background px-2 py-1.5 text-sm";
-const types = ["noul", "choice", "score", "box"] as const;
+const types = [
+  "noul",
+  "choice",
+  "score",
+  "box",
+] as const satisfies readonly EditableQuestion["type"][];
 const capabilities = [
   [imagesHeader, "Enable images"],
   [longContextHeader, "Enable long context"],
-] as const;
+] as const satisfies readonly (readonly [
+  keyof PipelineDraft["options"]["headers"],
+  string,
+])[];
 
 function toFields(
   draft: PipelineDraft,

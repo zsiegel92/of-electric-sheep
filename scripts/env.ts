@@ -9,6 +9,10 @@ import { parseEnv } from "node:util";
 
 const envFile = new URL("../.env", import.meta.url);
 const testKeyPlaceholder = "__LOCAL_SYSTEM_ONE_TEST_API_KEY__";
+const hexPlaceholders = [
+  ["__LOCAL_AUTH_SECRET__", 32],
+  ["__LOCAL_DB_PASSWORD__", 24],
+] as const satisfies readonly (readonly [placeholder: string, bytes: number])[];
 
 if (!existsSync(envFile)) {
   let contents = readFileSync(
@@ -19,10 +23,7 @@ if (!existsSync(envFile)) {
     testKeyPlaceholder,
     `oes_${randomBytes(32).toString("base64url")}`,
   );
-  for (const [placeholder, bytes] of [
-    ["__LOCAL_AUTH_SECRET__", 32],
-    ["__LOCAL_DB_PASSWORD__", 24],
-  ] as const) {
+  for (const [placeholder, bytes] of hexPlaceholders) {
     if (!contents.includes(placeholder)) {
       throw new Error(`Missing ${placeholder} in .env.example`);
     }

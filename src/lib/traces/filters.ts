@@ -1,46 +1,42 @@
 import { z } from "zod";
-import type { systemOneResponse } from "@/lib/system-one/typesafe-api-schemas";
+import type { decisionTraces } from "@/lib/db/schema";
 
-type DecisionAnswers = z.output<typeof systemOneResponse>["answers"];
+type ConfidenceSortColumn = keyof Pick<
+  typeof decisionTraces.$inferSelect,
+  "minConfidence" | "averageConfidence"
+>;
 
-export const rankedTraceLimit = 100;
+type TraceOrderOption = { id: string; label: string } & (
+  | { sort: "startedAt"; direction: "desc" }
+  | { sort: ConfidenceSortColumn; direction: "asc" | "desc" }
+);
+type DefaultTraceOrder = Extract<TraceOrderOption, { sort: "startedAt" }> & {
+  id: "recent";
+};
+
 export const traceOrders = [
-  { id: "recent", label: "Newest first" },
+  { id: "recent", label: "Newest first", sort: "startedAt", direction: "desc" },
   {
     id: "least-single",
     label: "Least confident single choice",
-    rank: (values: number[]) => Math.min(...values),
+    sort: "minConfidence",
+    direction: "asc",
   },
   {
     id: "least-average",
     label: "Least confident average choice",
-    rank: average,
+    sort: "averageConfidence",
+    direction: "asc",
   },
   {
     id: "most-average",
     label: "Most confident average choice",
-    rank: (values: number[]) => -average(values),
+    sort: "averageConfidence",
+    direction: "desc",
   },
-] as const;
+] as const satisfies readonly [DefaultTraceOrder, ...TraceOrderOption[]];
 
 export const traceOrder = z.enum(traceOrders.map(({ id }) => id));
 export const annotationStatus = z.enum(["all", "unannotated", "annotated"]);
+export type TraceOrder = z.output<typeof traceOrder>;
 export type AnnotationStatus = z.output<typeof annotationStatus>;
-
-function average(values: number[]) {
-  return values.reduce((sum, value) => sum + value, 0) / values.length;
-}
-
-export function traceConfidences(answers: DecisionAnswers | undefined) {
-  return Object.values(answers ?? {}).flatMap((answer) => {
-    if (answer.type === "noul") return Math.max(answer.noul, 1 - answer.noul);
-    return answer.confidence ?? [];
-  });
-}
-
-export function matchesAnnotationStatus(
-  status: AnnotationStatus,
-  annotated: boolean,
-) {
-  return status === "all" || (status === "annotated") === annotated;
-}

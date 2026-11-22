@@ -476,7 +476,7 @@ export async function evolveDecisionPipeline(
       uiIgnored,
       definitionHash: hashPipelineDefinition(definition, baseUrl),
       primaryGroupedPipelineId: id,
-    };
+    } satisfies typeof decisionPipelines.$inferInsert;
     const [inserted] = await tx
       .insert(decisionPipelines)
       .values(row)

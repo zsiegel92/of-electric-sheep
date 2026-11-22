@@ -4,24 +4,25 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { listPipelineVersions } from "@/lib/decisions/queries";
 import {
-  findDecisionTrace,
-  getPipelineTracePage,
-} from "@/lib/langfuse/decision-traces";
-import { traceId } from "@/lib/langfuse/schemas";
-import {
   deleteTraceAnnotation,
-  listTraceAnnotations,
   upsertTraceAnnotation,
 } from "@/lib/traces/annotation-queries";
 import { annotationChoices } from "@/lib/traces/annotations";
 import { annotationStatus, traceOrder } from "@/lib/traces/filters";
-import { verifyTraceProof } from "@/lib/traces/trace-proof";
+import {
+  findDecisionTrace,
+  getOwnedTraceAnnotations,
+  getPipelineTracePage,
+} from "@/lib/traces/queries";
+import { traceId } from "@/lib/traces/schemas";
+
+const traceReference = z.object({ pipelineId: z.uuid(), traceId });
 
 export const listPipelineTraces = createServerFn()
   .validator(
     z.object({
       pipelineId: z.uuid(),
-      cursor: z.string().optional(),
+      cursor: traceId.optional(),
       until: z.iso.datetime().optional(),
       status: annotationStatus.optional(),
       order: traceOrder.optional(),
@@ -37,7 +38,7 @@ export const listPipelineTraces = createServerFn()
         name: pipeline.displayName ?? pipeline.model ?? pipeline.id,
         questions: pipeline.questions,
       },
-      ...(await getPipelineTracePage(pipeline, page)),
+      ...(await getPipelineTracePage(pipelineId, page)),
     };
   });
 
@@ -45,59 +46,64 @@ export const getDecisionTrace = createServerFn()
   .validator(traceId)
   .handler(async ({ data, context }) => {
     const user = requireUser(context.user);
-    const trace = await findDecisionTrace(data, async (pipelineId) => {
-      const [pipeline] = await listPipelineVersions(user.githubId, [
-        pipelineId,
-      ]);
-      return pipeline;
-    });
+    const trace = await findDecisionTrace(user.githubId, data);
     if (!trace) throw notFound();
-    const saved = await listTraceAnnotations(trace.pipeline.id, [data]);
-    return { ...trace, annotations: saved.get(data) ?? [] };
+    const [pipeline] = await listPipelineVersions(user.githubId, [
+      trace.pipelineId,
+    ]);
+    if (!pipeline) throw notFound();
+    return {
+      pipeline: {
+        id: pipeline.id,
+        name: pipeline.displayName ?? pipeline.model ?? pipeline.id,
+      },
+      trace,
+      questions: pipeline.questions,
+    };
   });
+
+export const getStoredTraceAnnotations = createServerFn()
+  .validator(traceReference)
+  .handler(({ data, context }) =>
+    getOwnedTraceAnnotations(
+      requireUser(context.user).githubId,
+      data.pipelineId,
+      data.traceId,
+    ),
+  );
 
 export const saveTraceAnnotation = createServerFn({ method: "POST" })
   .validator(
-    z.object({
-      pipelineId: z.uuid(),
-      traceId,
+    traceReference.extend({
       questionName: z.string().min(1),
       choiceKey: z.string().min(1).nullable(),
-      serverSignedTraceProof: z.string().length(64).optional(),
     }),
   )
   .handler(async ({ data, context }) => {
     const user = requireUser(context.user);
-    const [pipeline] = await listPipelineVersions(user.githubId, [
-      data.pipelineId,
-    ]);
-    if (!pipeline) throw notFound();
-
-    const { choiceKey, serverSignedTraceProof, ...key } = data;
+    const { choiceKey, ...key } = data;
+    if (
+      (await getOwnedTraceAnnotations(
+        user.githubId,
+        key.pipelineId,
+        key.traceId,
+      )) === null
+    )
+      throw notFound();
     if (choiceKey === null) {
       await deleteTraceAnnotation(key);
       return;
     }
-
-    let choices: ReturnType<typeof annotationChoices> | undefined;
+    const [pipeline] = await listPipelineVersions(user.githubId, [
+      data.pipelineId,
+    ]);
+    const question = pipeline?.questions.find(
+      ({ name }) => name === key.questionName,
+    );
     if (
-      serverSignedTraceProof &&
-      verifyTraceProof(key, serverSignedTraceProof)
+      !question ||
+      !annotationChoices(question.question).some(({ key }) => key === choiceKey)
     ) {
-      const question = pipeline.questions.find(
-        ({ name }) => name === key.questionName,
-      );
-      if (question) choices = annotationChoices(question.question);
-    } else {
-      const trace = await findDecisionTrace(key.traceId, async (id) =>
-        id === pipeline.id ? pipeline : undefined,
-      );
-      if (!trace) throw notFound();
-      choices = trace.annotationQuestions.find(
-        ({ name }) => name === key.questionName,
-      )?.choices;
-    }
-    if (!choices?.some(({ key }) => key === choiceKey)) {
       throw new Error("Choose an option from this trace's question.");
     }
     await upsertTraceAnnotation({ ...key, choiceKey });

@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   boolean,
   check,
+  doublePrecision,
   foreignKey,
   index,
   jsonb,
@@ -14,6 +15,8 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import type { PipelineDefinition } from "@/lib/decisions/pipeline-schemas";
+
+import type { TraceRecord } from "@/lib/traces/schemas";
 
 type DecisionQuestion = PipelineDefinition["questions"][string];
 
@@ -171,6 +174,45 @@ export const decisionQuestionLinks = pgTable(
   ],
 );
 
+export const decisionTraces = pgTable(
+  "decision_traces",
+  {
+    pipelineId: uuid("pipeline_id")
+      .notNull()
+      .references(() => decisionPipelines.id, { onDelete: "cascade" }),
+    traceId: text("trace_id").notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+    endedAt: timestamp("ended_at", { withTimezone: true }),
+    recordedAt: timestamp("recorded_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    model: text(),
+    failed: boolean().notNull().default(false),
+    state: jsonb().$type<NonNullable<TraceRecord["state"]>>(),
+    answers: jsonb().$type<NonNullable<TraceRecord["answers"]>>(),
+    usage: jsonb().$type<NonNullable<TraceRecord["usage"]>>(),
+    minConfidence: doublePrecision("min_confidence"),
+    averageConfidence: doublePrecision("average_confidence"),
+    observabilityUrl: text("observability_url"),
+    payloadTruncated: boolean("payload_truncated").notNull().default(false),
+    historicalPlaceholder: boolean("historical_placeholder")
+      .notNull()
+      .default(false),
+  },
+  (table) => [
+    primaryKey({
+      name: "decision_traces_pk",
+      columns: [table.pipelineId, table.traceId],
+    }),
+    index("decision_traces_id_idx").on(table.traceId),
+    index("decision_traces_recent_idx").on(
+      table.pipelineId,
+      table.startedAt.desc(),
+      table.traceId.desc(),
+    ),
+  ],
+);
+
 export const decisionTraceAnnotations = pgTable(
   "decision_trace_annotations",
   {
@@ -187,6 +229,11 @@ export const decisionTraceAnnotations = pgTable(
       name: "decision_trace_annotations_pk",
       columns: [table.pipelineId, table.traceId, table.questionName],
     }),
+    foreignKey({
+      name: "decision_trace_annotations_trace_fk",
+      columns: [table.pipelineId, table.traceId],
+      foreignColumns: [decisionTraces.pipelineId, decisionTraces.traceId],
+    }).onDelete("cascade"),
     foreignKey({
       name: "decision_trace_annotations_question_fk",
       columns: [table.pipelineId, table.questionName],

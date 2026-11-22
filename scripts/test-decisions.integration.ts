@@ -17,7 +17,11 @@ import {
   decisionQuestionLinks,
   users,
 } from "../src/lib/db/schema";
-import { newPipelineUsed, pipelineUsed } from "../src/lib/decisions/events";
+import {
+  decisionTraceCompleted,
+  newPipelineUsed,
+  pipelineUsed,
+} from "../src/lib/decisions/events";
 import { pipelineDefinitionSchema } from "../src/lib/decisions/pipeline-schemas";
 import {
   ensureDecisionPipeline,
@@ -31,6 +35,13 @@ import { matchQuestions } from "../src/lib/decisions/question-links";
 import { inngest } from "../src/lib/inngest/inngest";
 import { exactPipelineHeader } from "../src/lib/system-one/type-helpers";
 import { systemOneRequest } from "../src/lib/system-one/typesafe-api-schemas";
+import { upsertTraceAnnotation } from "../src/lib/traces/annotation-queries";
+import {
+  findDecisionTrace,
+  getOwnedTraceAnnotations,
+  getPipelineTracePage,
+  storeTrace,
+} from "../src/lib/traces/queries";
 import { isRequestThatRequiresApiKey } from "../src/lib/typesafe-api/paths";
 import { systemOneRouter } from "../src/server/system-one/router";
 import { systemOneRoutes } from "../src/server/system-one/routes";
@@ -61,6 +72,7 @@ await test("decision processing integration", async (t) => {
   const calls: Array<{ path: string; body: unknown; authorization: string }> =
     [];
   const events: UsageEvent[] = [];
+  const traces: ReturnType<typeof decisionTraceCompleted.create>[] = [];
   const testUsers: User[] = [];
   const newUser = (): User => {
     const user = {
@@ -84,6 +96,10 @@ await test("decision processing integration", async (t) => {
       authorization: request.headers.authorization ?? "",
     });
     response.setHeader("Content-Type", "application/json");
+    if (body.state === "Fail fixture") {
+      response.writeHead(500).end("{}");
+      return;
+    }
     response.end(
       JSON.stringify({
         model: "test-model",
@@ -126,13 +142,25 @@ await test("decision processing integration", async (t) => {
   process.env["LANGFUSE_PUBLIC_KEY"] = "";
   process.env["LANGFUSE_SECRET_KEY"] = "";
   const { processDecision } = await import("../src/lib/decisions/decide");
-  t.mock.method(inngest, "send", async (event: UsageEvent | UsageEvent[]) => {
-    events.push(...(Array.isArray(event) ? event : [event]));
-    return { ids: [randomUUID()] };
-  });
+  t.mock.method(
+    inngest,
+    "send",
+    async (
+      event:
+        | UsageEvent
+        | ReturnType<typeof decisionTraceCompleted.create>
+        | UsageEvent[],
+    ) => {
+      if (Array.isArray(event)) events.push(...event);
+      else if (event.name === decisionTraceCompleted.name) traces.push(event);
+      else events.push(event);
+      return { ids: [randomUUID()] };
+    },
+  );
   t.beforeEach(() => {
     calls.length = 0;
     events.length = 0;
+    traces.length = 0;
   });
 
   try {
@@ -211,6 +239,161 @@ await test("decision processing integration", async (t) => {
             assert.equal(
               (await rowsFor(user))[0]?.primaryGroupedPipelineId,
               creation.data.pipelineId,
+            );
+          },
+        );
+
+        await t.test(
+          "Publishes independently identified decision traces and stores them idempotently",
+          async () => {
+            const user = await registerUser();
+            const result = await processDecision(input, user);
+            assert.match(result.traceId, /^[a-f0-9]{32}$/);
+            const [event] = traces;
+            assert.ok(event);
+            assert.equal(event.data.traceId, result.traceId);
+            assert.equal(event.data.state, input.state);
+            assert.deepEqual(event.data.answers, result.answers);
+            assert.deepEqual(event.data.usage, result.usage);
+            assert.equal(event.data.failed, false);
+            assert.equal(
+              await findDecisionTrace(user.githubId, result.traceId),
+              undefined,
+            );
+            await Promise.all([storeTrace(event.data), storeTrace(event.data)]);
+            const stored = await findDecisionTrace(
+              user.githubId,
+              result.traceId,
+            );
+            assert.deepEqual(stored?.answers, result.answers);
+            assert.equal(
+              (await getPipelineTracePage(event.data.pipelineId, {})).traces
+                .length,
+              1,
+            );
+            assert.equal(
+              await findDecisionTrace(randomUUID(), result.traceId),
+              undefined,
+            );
+            await assert.rejects(
+              processDecision({ ...input, state: "Fail fixture" }, user),
+            );
+            const failed = traces.at(-1);
+            assert.ok(failed?.data.failed);
+            await storeTrace(failed.data);
+            assert.equal(
+              (await findDecisionTrace(user.githubId, failed.data.traceId))
+                ?.failed,
+              true,
+            );
+          },
+        );
+
+        await t.test(
+          "Filters annotation joins and paginates tied and null confidence scores in Postgres",
+          async () => {
+            const user = await registerUser();
+            const { pipeline } = await ensureDecisionPipeline(user, definition);
+            await saveDecisionPipelineDefinition(
+              pipeline.id,
+              user.githubId,
+              definition,
+            );
+            const startedAt = new Date().toISOString();
+            const ids = Array.from({ length: 13 }, () =>
+              randomUUID().replaceAll("-", ""),
+            )
+              .sort()
+              .reverse();
+            await Promise.all(
+              ids.map((traceId, index) =>
+                storeTrace({
+                  pipelineId: pipeline.id,
+                  traceId,
+                  startedAt,
+                  model: input.model,
+                  failed: index === 12,
+                  answers:
+                    index === 12
+                      ? undefined
+                      : {
+                          topic: {
+                            type: "choice",
+                            choice: "yes",
+                            confidence: index === 0 ? 0.9 : 0.6,
+                            probabilities: { yes: 0.6, no: 0.4 },
+                          },
+                          other: {
+                            type: "noul",
+                            noul: index === 0 ? 0.5 : 0.9,
+                          },
+                        },
+                }),
+              ),
+            );
+            const leastSingle = await getPipelineTracePage(pipeline.id, {
+              order: "least-single",
+            });
+            const leastAverage = await getPipelineTracePage(pipeline.id, {
+              order: "least-average",
+            });
+            assert.equal(leastSingle.traces[0]?.traceId, ids[0]);
+            assert.equal(leastAverage.traces[0]?.traceId, ids[0]);
+            const mostAverage = await getPipelineTracePage(pipeline.id, {
+              order: "most-average",
+            });
+            assert.deepEqual(
+              mostAverage.traces.map(({ traceId }) => traceId),
+              ids.slice(1, 11),
+            );
+            const rest = await getPipelineTracePage(pipeline.id, {
+              order: "most-average",
+              cursor: mostAverage.next,
+              until: mostAverage.until,
+            });
+            assert.deepEqual(
+              rest.traces.map(({ traceId }) => traceId),
+              [ids[11], ids[0], ids[12]],
+            );
+            assert.equal(rest.next, undefined);
+            const [traceId] = ids;
+            assert.ok(traceId);
+            const annotation = {
+              pipelineId: pipeline.id,
+              traceId,
+              questionName: "topic",
+              choiceKey: "yes",
+            };
+            await upsertTraceAnnotation(annotation);
+            const annotated = await getPipelineTracePage(pipeline.id, {
+              status: "annotated",
+            });
+            assert.deepEqual(
+              annotated.traces.map(({ traceId }) => traceId),
+              [traceId],
+            );
+            assert.deepEqual(
+              await getOwnedTraceAnnotations(
+                user.githubId,
+                pipeline.id,
+                traceId,
+              ),
+              [{ questionName: "topic", choiceKey: "yes" }],
+            );
+            assert.equal(
+              await getOwnedTraceAnnotations(
+                randomUUID(),
+                pipeline.id,
+                traceId,
+              ),
+              null,
+            );
+            assert.ok(
+              !(
+                await getPipelineTracePage(pipeline.id, {
+                  status: "unannotated",
+                })
+              ).traces.some((trace) => trace.traceId === traceId),
             );
           },
         );

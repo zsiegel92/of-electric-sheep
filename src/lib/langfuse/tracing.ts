@@ -25,10 +25,10 @@ const processor = configureLangfuse();
 
 export async function traceGeneration<T>(
   name: string,
-  metadata: { pipelineId: string },
+  metadata: { pipelineId: string; decisionTraceId: string },
   run: (generation?: LangfuseGeneration) => Promise<T>,
-): Promise<{ result: T; traceId?: string }> {
-  if (!processor) return { result: await run() };
+): Promise<T> {
+  if (!processor) return run();
 
   const generation = startObservation(
     name,
@@ -38,7 +38,7 @@ export async function traceGeneration<T>(
   try {
     const result = await run(generation);
     generation.update({ output: result });
-    return { result, traceId: generation.traceId };
+    return result;
   } catch (error) {
     generation.update({ level: "ERROR", statusMessage: "Decision failed" });
     throw error;

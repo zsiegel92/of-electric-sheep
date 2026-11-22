@@ -1,4 +1,5 @@
 import type {
+  ConditionalSchemaConverter,
   OpenAPIGeneratorGenerateOptions,
   SchemaConverter,
 } from "@orpc/openapi";
@@ -8,6 +9,7 @@ import type { AnyRouter } from "@orpc/server";
 import { ZodToJsonSchemaConverter } from "@orpc/zod/zod4";
 import { createFileRoute } from "@tanstack/react-router";
 import { apiKeyHeader } from "@/lib/api-keys/schemas";
+import { tracedSystemOneResponse } from "@/lib/traces/schemas";
 import { reshapeTypeSafeApiRequest } from "@/lib/typesafe-api/reshape-request";
 import type { User } from "../lib/auth";
 import { systemOneMultipartRequestSchema } from "../lib/system-one/type-helpers";
@@ -16,7 +18,6 @@ import {
   modelList,
   question,
   systemOneRequest,
-  tracedSystemOneResponse,
 } from "../lib/system-one/typesafe-api-schemas";
 import { apiKeysTag, keyManagementRouter } from "../server/api-keys";
 import { systemOneRouter, systemOneTag } from "../server/system-one/router";
@@ -26,7 +27,9 @@ export const apiRouters = {
   apiKeys: keyManagementRouter,
 } satisfies AnyRouter;
 
-const schemaConverters = [new ZodToJsonSchemaConverter()];
+const schemaConverters = [
+  new ZodToJsonSchemaConverter(),
+] satisfies ConditionalSchemaConverter[];
 type JsonSchema = Awaited<ReturnType<SchemaConverter["convert"]>>[1];
 
 const specOptions = {
