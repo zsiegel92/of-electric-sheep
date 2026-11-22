@@ -6,6 +6,7 @@ import { test } from "node:test";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import { DrizzleQueryError, eq, inArray } from "drizzle-orm";
 import { PostgresError } from "postgres";
+import { z } from "zod";
 import { createApiKey, saveUser } from "../src/lib/api-keys/queries";
 import { apiKeyHeader } from "../src/lib/api-keys/schemas";
 import type { User } from "../src/lib/auth";
@@ -36,10 +37,12 @@ import { inngest } from "../src/lib/inngest/inngest";
 import { exactPipelineHeader } from "../src/lib/system-one/type-helpers";
 import { systemOneRequest } from "../src/lib/system-one/typesafe-api-schemas";
 import { upsertTraceAnnotation } from "../src/lib/traces/annotation-queries";
+import type { TraceQuery } from "../src/lib/traces/filters";
 import {
   findDecisionTrace,
   getOwnedTraceAnnotations,
   getPipelineTracePage,
+  openPipelineTraceExport,
   storeTrace,
 } from "../src/lib/traces/queries";
 import { isRequestThatRequiresApiKey } from "../src/lib/typesafe-api/paths";
@@ -300,7 +303,7 @@ await test("decision processing integration", async (t) => {
               definition,
             );
             const startedAt = new Date().toISOString();
-            const ids = Array.from({ length: 13 }, () =>
+            const ids = Array.from({ length: 18 }, () =>
               randomUUID().replaceAll("-", ""),
             )
               .sort()
@@ -312,9 +315,10 @@ await test("decision processing integration", async (t) => {
                   traceId,
                   startedAt,
                   model: input.model,
-                  failed: index === 12,
+                  failed: index === ids.length - 1,
+                  state: index === 0 ? "First line\nSecond line" : undefined,
                   answers:
-                    index === 12
+                    index === ids.length - 1
                       ? undefined
                       : {
                           topic: {
@@ -353,7 +357,7 @@ await test("decision processing integration", async (t) => {
             });
             assert.deepEqual(
               rest.traces.map(({ traceId }) => traceId),
-              [ids[11], ids[0], ids[12]],
+              [...ids.slice(11, -1), ids[0], ids.at(-1)],
             );
             assert.equal(rest.next, undefined);
             const [traceId] = ids;
@@ -394,6 +398,61 @@ await test("decision processing integration", async (t) => {
                   status: "unannotated",
                 })
               ).traces.some((trace) => trace.traceId === traceId),
+            );
+
+            const exportedTrace = z.object({
+              traceId: z.string(),
+              pipelineId: z.uuid(),
+              state: z.string().nullable(),
+              annotations: z.array(
+                z.object({ questionName: z.string(), choiceKey: z.string() }),
+              ),
+            });
+            async function exportRows(query: TraceQuery) {
+              const stream = await openPipelineTraceExport(
+                user.githubId,
+                pipeline.id,
+                query,
+                new AbortController().signal,
+              );
+              assert.ok(stream);
+              const body = await new Response(stream).text();
+              assert.ok(body.endsWith("\n"));
+              return body
+                .trimEnd()
+                .split("\n")
+                .map((line) => exportedTrace.parse(JSON.parse(line)));
+            }
+            const exportAll = await exportRows({ order: "most-average" });
+            assert.deepEqual(
+              exportAll.map((row) => row.traceId),
+              [...ids.slice(1, -1), ids[0], ids.at(-1)],
+            );
+            assert.ok(exportAll.every((row) => row.pipelineId === pipeline.id));
+            const exportAnnotated = await exportRows({ status: "annotated" });
+            assert.deepEqual(exportAnnotated, [
+              {
+                traceId,
+                pipelineId: pipeline.id,
+                state: "First line\nSecond line",
+                annotations: [{ questionName: "topic", choiceKey: "yes" }],
+              },
+            ]);
+            const exportUnannotated = await exportRows({
+              status: "unannotated",
+            });
+            assert.deepEqual(
+              exportUnannotated.map((row) => row.traceId),
+              ids.slice(1),
+            );
+            assert.equal(
+              await openPipelineTraceExport(
+                randomUUID(),
+                pipeline.id,
+                {},
+                new AbortController().signal,
+              ),
+              undefined,
             );
           },
         );

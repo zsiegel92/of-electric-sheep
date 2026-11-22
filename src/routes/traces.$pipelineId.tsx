@@ -1,5 +1,5 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import { ArrowLeft, ArrowRight, Download } from "lucide-react";
 import { z } from "zod";
 import { PageHeader } from "@/components/page-header";
 import { PipelineEditorLink } from "@/components/pipeline-view-links";
@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { ViewModeSwitch } from "@/components/view-mode-switch";
 import {
   annotationStatus,
+  getTraceAnnotationFilter,
+  traceAnnotationFilters,
   traceOrder,
   traceOrders,
 } from "@/lib/traces/filters";
@@ -46,6 +48,7 @@ function PipelineTraces() {
     data.pipeline.questions,
   );
   const { json = false, status, order, after, until } = Route.useSearch();
+  const filter = getTraceAnnotationFilter(status);
   return (
     <div className="space-y-6">
       <PageHeader
@@ -54,12 +57,12 @@ function PipelineTraces() {
         actions={<PipelineEditorLink pipelineId={data.pipeline.id} />}
         controls={<TraceViewMode />}
       />
-      <TraceFilters />
+      <TraceFilters pipelineId={data.pipeline.id} />
       {(data.traces.length > 0 || questions.length > 0) && (
         <TraceTable
           key={JSON.stringify([data.pipeline.id, status, order, after, until])}
           pipelineId={data.pipeline.id}
-          removeFinished={status === "unannotated"}
+          removeFinished={filter.annotated === false}
           questions={questions}
           traces={data.traces}
           showJson={json}
@@ -75,9 +78,11 @@ function PipelineTraces() {
   );
 }
 
-function TraceFilters() {
+function TraceFilters({ pipelineId }: { pipelineId: string }) {
   const { status = "all", order = "recent" } = Route.useSearch();
   const navigate = Route.useNavigate();
+  const filter = getTraceAnnotationFilter(status);
+  const exportQuery = new URLSearchParams({ status, order });
   return (
     <fieldset className="flex flex-wrap items-end gap-x-4 gap-y-2">
       <legend className="sr-only">Trace filters</legend>
@@ -98,9 +103,11 @@ function TraceFilters() {
             });
           }}
         >
-          <option value="all">All traces</option>
-          <option value="unannotated">Un-Annotated</option>
-          <option value="annotated">Annotated</option>
+          {traceAnnotationFilters.map(({ id, label }) => (
+            <option key={id} value={id}>
+              {label}
+            </option>
+          ))}
         </select>
       </label>
       <label className="grid gap-1 text-xs font-medium">
@@ -127,6 +134,11 @@ function TraceFilters() {
           ))}
         </select>
       </label>
+      <Button asChild variant="outline" size="sm">
+        <a href={`/api/traces/${pipelineId}/export?${exportQuery}`} download>
+          <Download aria-hidden="true" /> {filter.exportLabel}
+        </a>
+      </Button>
       {order !== "recent" && (
         <p className="text-xs text-muted-foreground sm:pb-2">
           Traces without confidence appear last.

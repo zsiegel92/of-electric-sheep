@@ -8,7 +8,7 @@ import {
   upsertTraceAnnotation,
 } from "@/lib/traces/annotation-queries";
 import { annotationChoices } from "@/lib/traces/annotations";
-import { annotationStatus, traceOrder } from "@/lib/traces/filters";
+import { traceQuery } from "@/lib/traces/filters";
 import {
   findDecisionTrace,
   getOwnedTraceAnnotations,
@@ -20,12 +20,10 @@ const traceReference = z.object({ pipelineId: z.uuid(), traceId });
 
 export const listPipelineTraces = createServerFn()
   .validator(
-    z.object({
+    traceQuery.extend({
       pipelineId: z.uuid(),
       cursor: traceId.optional(),
       until: z.iso.datetime().optional(),
-      status: annotationStatus.optional(),
-      order: traceOrder.optional(),
     }),
   )
   .handler(async ({ data: { pipelineId, ...page }, context }) => {

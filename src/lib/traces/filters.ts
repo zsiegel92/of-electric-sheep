@@ -36,7 +36,50 @@ export const traceOrders = [
   },
 ] as const satisfies readonly [DefaultTraceOrder, ...TraceOrderOption[]];
 
+type TraceAnnotationFilter = {
+  id: string;
+  label: string;
+  annotated: boolean | null;
+  exportLabel: string;
+};
+
+export const traceAnnotationFilters = [
+  {
+    id: "all",
+    label: "All traces",
+    annotated: null,
+    exportLabel: "Export all traces as JSONL",
+  },
+  {
+    id: "unannotated",
+    label: "Un-Annotated",
+    annotated: false,
+    exportLabel: "Export unannotated traces as JSONL",
+  },
+  {
+    id: "annotated",
+    label: "Annotated",
+    annotated: true,
+    exportLabel: "Export annotated traces as JSONL",
+  },
+] as const satisfies readonly [
+  TraceAnnotationFilter & { id: "all"; annotated: null },
+  ...TraceAnnotationFilter[],
+];
+
 export const traceOrder = z.enum(traceOrders.map(({ id }) => id));
-export const annotationStatus = z.enum(["all", "unannotated", "annotated"]);
-export type TraceOrder = z.output<typeof traceOrder>;
-export type AnnotationStatus = z.output<typeof annotationStatus>;
+export const annotationStatus = z.enum(
+  traceAnnotationFilters.map(({ id }) => id),
+);
+export const traceQuery = z.object({
+  status: annotationStatus.optional(),
+  order: traceOrder.optional(),
+});
+export type TraceQuery = z.output<typeof traceQuery>;
+
+export function getTraceAnnotationFilter(status?: TraceQuery["status"]) {
+  return (
+    traceAnnotationFilters.find(({ id }) => id === status) ??
+    traceAnnotationFilters[0]
+  );
+}

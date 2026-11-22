@@ -10,8 +10,10 @@ import {
   not,
   or,
   type SQL,
+  type SQLWrapper,
   sql,
 } from "drizzle-orm";
+import { z } from "zod";
 import { getDb } from "@/lib/db/db";
 import {
   decisionPipelines,
@@ -20,7 +22,11 @@ import {
 } from "@/lib/db/schema";
 import { getObservabilityUrl } from "@/lib/langfuse/links";
 import type { TraceAnnotation } from "./annotations";
-import { type AnnotationStatus, type TraceOrder, traceOrders } from "./filters";
+import {
+  getTraceAnnotationFilter,
+  type TraceQuery,
+  traceOrders,
+} from "./filters";
 import type { TraceRecord } from "./schemas";
 
 function summarizeTraceConfidence(
@@ -127,17 +133,12 @@ export async function getPipelineTracePage(
   {
     cursor,
     until,
-    status = "all",
-    order = "recent",
-  }: {
-    cursor?: string | undefined;
-    until?: string | undefined;
-    status?: AnnotationStatus | undefined;
-    order?: TraceOrder | undefined;
-  },
+    status,
+    order,
+  }: TraceQuery & { cursor?: string | undefined; until?: string | undefined },
 ) {
   const snapshot = until ? new Date(until) : new Date();
-  const ordering = traceOrders.find(({ id }) => id === order) ?? traceOrders[0];
+  const ordering = getTraceOrdering(order);
   const anchor = cursor
     ? await findTracePageAnchor(pipelineId, cursor)
     : undefined;
@@ -207,15 +208,20 @@ function tracesAfterAnchor(anchor: TracePageAnchor, ordering: TraceOrdering) {
   );
 }
 
-function traceAnnotationFilter(status: AnnotationStatus) {
-  if (status === "all") return undefined;
+function traceAnnotationFilter(status: TraceQuery["status"]) {
+  const { annotated: required } = getTraceAnnotationFilter(status);
+  if (required === null) return undefined;
   const annotated = exists(
     getDb()
       .select({ one: sql`1` })
       .from(decisionTraceAnnotations)
       .where(annotationMatches),
   );
-  return status === "annotated" ? annotated : not(annotated);
+  return required ? annotated : not(annotated);
+}
+
+function getTraceOrdering(order: TraceQuery["order"]): TraceOrdering {
+  return traceOrders.find(({ id }) => id === order) ?? traceOrders[0];
 }
 
 function tracePageOrderBy(ordering: TraceOrdering): readonly SQL[] {
@@ -226,6 +232,74 @@ function tracePageOrderBy(ordering: TraceOrdering): readonly SQL[] {
       ? sql`${column} asc nulls last`
       : sql`${column} desc nulls last`;
   return [confidenceFirst, ...newestDecisionTracesFirst];
+}
+
+const { startedAt, endedAt, ...exportColumns } = traceColumns;
+const traceExportFields = {
+  ...exportColumns,
+  startTime: startedAt,
+  endTime: endedAt,
+} satisfies Record<keyof ReturnType<typeof traceView>, SQLWrapper>;
+
+const traceJsonLine = sql<string>`jsonb_build_object(${sql.join(
+  Object.entries(traceExportFields).map(
+    ([key, column]) => sql`${key}::text, ${column}`,
+  ),
+  sql`, `,
+)})::text`.as("line");
+
+export async function openPipelineTraceExport(
+  userId: string,
+  pipelineId: string,
+  { status, order }: TraceQuery,
+  signal: AbortSignal,
+): Promise<ReadableStream<Uint8Array> | undefined> {
+  const db = getDb();
+  const ownedPipeline = and(
+    eq(decisionPipelines.id, pipelineId),
+    eq(decisionPipelines.userId, userId),
+  );
+  const [pipeline] = await db
+    .select({ id: decisionPipelines.id })
+    .from(decisionPipelines)
+    .where(ownedPipeline)
+    .limit(1);
+  if (!pipeline) return;
+
+  // Stream a single Postgres cursor so the export sees a consistent snapshot.
+  const query = db
+    .select({ line: traceJsonLine })
+    .from(decisionTraces)
+    .innerJoin(
+      decisionPipelines,
+      eq(decisionPipelines.id, decisionTraces.pipelineId),
+    )
+    .where(and(ownedPipeline, traceAnnotationFilter(status)))
+    .orderBy(...tracePageOrderBy(getTraceOrdering(order)))
+    .toSQL();
+  const params = z.array(z.json()).parse(query.params);
+  const cursor = db.$client
+    .unsafe<{ line: string }[]>(query.sql, params)
+    .signal(signal)
+    .cursor(16);
+  const lines = encodeTraceLines(cursor);
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      const line = await lines.next();
+      if (line.done) controller.close();
+      else controller.enqueue(line.value);
+    },
+    async cancel() {
+      await lines.return(undefined);
+    },
+  });
+}
+
+async function* encodeTraceLines(cursor: AsyncIterable<{ line: string }[]>) {
+  const encoder = new TextEncoder();
+  for await (const rows of cursor) {
+    for (const { line } of rows) yield encoder.encode(`${line}\n`);
+  }
 }
 
 export async function findDecisionTrace(userId: string, traceId: string) {
