@@ -5,12 +5,12 @@ import { ExpandableDataValue } from "@/components/expandable-data-value";
 import { PageHeader } from "@/components/page-header";
 import { PipelineQuestions } from "@/components/pipeline-questions";
 import { PipelineViewLinks } from "@/components/pipeline-view-links";
-import { QuestionName } from "@/components/question-name";
 import {
   FinishTraceAnnotation,
   TraceAnnotationEditor,
   TraceAnswer,
 } from "@/components/traces/trace-annotation";
+import { TraceQuestionAnnotations } from "@/components/traces/trace-question-annotations";
 import { TraceTime } from "@/components/traces/trace-table";
 import { Button } from "@/components/ui/button";
 import { ViewModeSwitch } from "@/components/view-mode-switch";
@@ -100,37 +100,14 @@ function TraceDetail() {
               choices={choicesByQuestion.get(question.name) ?? []}
             />
           )}
+          jsonFooter={
+            <TraceQuestionAnnotations
+              questions={questions}
+              answers={trace.answers}
+              choicesByQuestion={choicesByQuestion}
+            />
+          }
         />
-        {json && annotationQuestions.length > 0 && (
-          <section
-            aria-label="Trace annotations"
-            className="grid gap-3 sm:grid-cols-2"
-          >
-            {questions
-              .filter(({ name }) => choicesByQuestion.has(name))
-              .map((question) => (
-                <div
-                  key={question.name}
-                  className="min-w-0 space-y-2 rounded-lg border p-3"
-                >
-                  <p className="text-sm">
-                    <QuestionName name={question.name} alias={question.alias} />
-                  </p>
-                  <TraceAnswer
-                    {...question}
-                    controlsOnly
-                    choices={choicesByQuestion.get(question.name) ?? []}
-                    answer={
-                      trace.answers &&
-                      Object.hasOwn(trace.answers, question.name)
-                        ? trace.answers[question.name]
-                        : undefined
-                    }
-                  />
-                </div>
-              ))}
-          </section>
-        )}
       </div>
     </TraceAnnotationEditor>
   );

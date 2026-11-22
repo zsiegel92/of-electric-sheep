@@ -34,13 +34,17 @@ const AnnotationContext = createContext<AnnotationEditor | null>(null);
 export function TraceAnnotationEditor({
   pipelineId,
   traceId,
-  annotations,
+  annotations = [],
+  serverSignedTraceProof,
+  questionLinks,
   finish,
   children,
 }: {
   pipelineId: string;
   traceId: string;
-  annotations: TraceAnnotation[];
+  annotations?: TraceAnnotation[];
+  serverSignedTraceProof?: string;
+  questionLinks?: ReadonlyMap<string, string>;
   finish?: (() => void) | undefined;
   children: ReactNode;
 }) {
@@ -68,7 +72,13 @@ export function TraceAnnotationEditor({
     update({ ...current, pending: true });
     try {
       await saveTraceAnnotation({
-        data: { pipelineId, traceId, questionName, choiceKey },
+        data: {
+          pipelineId,
+          traceId,
+          questionName: questionLinks?.get(questionName) ?? questionName,
+          choiceKey,
+          serverSignedTraceProof,
+        },
       });
       update({ choiceKey });
       if (choiceKey === null) setDone(false);

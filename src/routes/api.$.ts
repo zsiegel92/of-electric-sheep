@@ -16,7 +16,7 @@ import {
   modelList,
   question,
   systemOneRequest,
-  systemOneResponse,
+  tracedSystemOneResponse,
 } from "../lib/system-one/typesafe-api-schemas";
 import { apiKeysTag, keyManagementRouter } from "../server/api-keys";
 import { systemOneRouter, systemOneTag } from "../server/system-one/router";
@@ -62,7 +62,7 @@ const specOptions = {
       schema: systemOneMultipartRequestSchema,
       strategy: "input",
     },
-    SystemOneResponse: { schema: systemOneResponse, strategy: "output" },
+    SystemOneResponse: { schema: tracedSystemOneResponse, strategy: "output" },
     SystemOneQuestion: { schema: question, strategy: "input" },
     SystemOneAnswer: { schema: answer, strategy: "output" },
     TypeSafeModelList: { schema: modelList, strategy: "output" },

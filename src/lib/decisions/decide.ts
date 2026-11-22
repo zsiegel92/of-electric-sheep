@@ -27,7 +27,7 @@ export async function processDecision(
   user: User,
   capabilities: DecisionCapabilities = {},
   exact = false,
-): ReturnType<typeof runDecision> {
+): ReturnType<typeof runPipeline> {
   const ingredients = await getSystemOneCoreIngredients(input, capabilities);
   const definition = pipelineDefinitionSchema.parse(ingredients);
   const { pipeline } = await ensureDecisionPipeline(user, definition);
@@ -41,18 +41,24 @@ export async function processDecision(
         message: "Pipeline definition is not ready",
       });
     }
-    return runStoredVersion(version, primary, ingredients, user);
+    const { decision } = await runStoredVersion(
+      version,
+      primary,
+      ingredients,
+      user,
+    );
+    return decision;
   }
   return runPipeline(ingredients, user, pipeline, definition);
 }
 
-function runPipeline(
+async function runPipeline(
   ingredients: SystemOneCoreIngredients,
   user: User,
   pipeline: { id: string; baseUrl: string | null; hasDefinition: boolean },
   definition: PipelineDefinition,
-) {
-  return traceGeneration(
+): Promise<Awaited<ReturnType<typeof runDecision>> & { traceId?: string }> {
+  const { result, traceId } = await traceGeneration(
     decisionObservationName,
     { pipelineId: pipeline.id },
     async (generation) => {
@@ -92,6 +98,7 @@ function runPipeline(
       return decision;
     },
   );
+  return traceId ? { ...result, traceId } : result;
 }
 
 async function runStoredVersion(
@@ -132,23 +139,26 @@ async function runStoredVersion(
     { id: primary.id, baseUrl: primary.baseUrl, hasDefinition: true },
     definition,
   );
-  if (!links) return result;
-
-  return {
-    ...result,
-    answers: Object.fromEntries(
-      version.questions.map(({ name, question }) => {
-        const primaryName = links.get(name);
-        const answer =
-          primaryName === undefined ? undefined : result.answers[primaryName];
-        if (answer?.type !== question.type)
-          throw new ORPCError("BAD_GATEWAY", {
-            message: "TypeSafe returned an unexpected answer",
-          });
-        return [name, answer];
-      }),
-    ),
-  };
+  const decision = links
+    ? {
+        ...result,
+        answers: Object.fromEntries(
+          version.questions.map(({ name, question }) => {
+            const primaryName = links.get(name);
+            const answer =
+              primaryName === undefined
+                ? undefined
+                : result.answers[primaryName];
+            if (answer?.type !== question.type)
+              throw new ORPCError("BAD_GATEWAY", {
+                message: "TypeSafe returned an unexpected answer",
+              });
+            return [name, answer];
+          }),
+        ),
+      }
+    : result;
+  return { decision, pipelineId: primary.id, links };
 }
 
 export async function processStoredDecision(

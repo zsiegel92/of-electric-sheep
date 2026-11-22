@@ -13,7 +13,9 @@ import {
   listTraceAnnotations,
   upsertTraceAnnotation,
 } from "@/lib/traces/annotation-queries";
+import { annotationChoices } from "@/lib/traces/annotations";
 import { annotationStatus, traceOrder } from "@/lib/traces/filters";
+import { verifyTraceProof } from "@/lib/traces/trace-proof";
 
 export const listPipelineTraces = createServerFn()
   .validator(
@@ -61,6 +63,7 @@ export const saveTraceAnnotation = createServerFn({ method: "POST" })
       traceId,
       questionName: z.string().min(1),
       choiceKey: z.string().min(1).nullable(),
+      serverSignedTraceProof: z.string().length(64).optional(),
     }),
   )
   .handler(async ({ data, context }) => {
@@ -70,19 +73,30 @@ export const saveTraceAnnotation = createServerFn({ method: "POST" })
     ]);
     if (!pipeline) throw notFound();
 
-    const { choiceKey, ...key } = data;
+    const { choiceKey, serverSignedTraceProof, ...key } = data;
     if (choiceKey === null) {
       await deleteTraceAnnotation(key);
       return;
     }
 
-    const trace = await findDecisionTrace(data.traceId, async (id) =>
-      id === pipeline.id ? pipeline : undefined,
-    );
-    if (!trace) throw notFound();
-    const choices = trace.annotationQuestions.find(
-      ({ name }) => name === data.questionName,
-    )?.choices;
+    let choices: ReturnType<typeof annotationChoices> | undefined;
+    if (
+      serverSignedTraceProof &&
+      verifyTraceProof(key, serverSignedTraceProof)
+    ) {
+      const question = pipeline.questions.find(
+        ({ name }) => name === key.questionName,
+      );
+      if (question) choices = annotationChoices(question.question);
+    } else {
+      const trace = await findDecisionTrace(key.traceId, async (id) =>
+        id === pipeline.id ? pipeline : undefined,
+      );
+      if (!trace) throw notFound();
+      choices = trace.annotationQuestions.find(
+        ({ name }) => name === key.questionName,
+      )?.choices;
+    }
     if (!choices?.some(({ key }) => key === choiceKey)) {
       throw new Error("Choose an option from this trace's question.");
     }

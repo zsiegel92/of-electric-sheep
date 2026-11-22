@@ -12,9 +12,20 @@ import { CurlPreview } from "@/components/curl-preview";
 import { PageHeader } from "@/components/page-header";
 import { PipelineName } from "@/components/pipeline-name";
 import { PipelineQuestions } from "@/components/pipeline-questions";
-import { PipelineTracesLink } from "@/components/pipeline-view-links";
+import {
+  PipelineTracesLink,
+  TraceDetailLink,
+} from "@/components/pipeline-view-links";
 import { usePipelineQuestions } from "@/components/question-name";
+import type { NamedQuestion } from "@/components/question-view";
+import {
+  FinishTraceAnnotation,
+  TraceAnnotationEditor,
+  TraceAnswer,
+} from "@/components/traces/trace-annotation";
+import { TraceQuestionAnnotations } from "@/components/traces/trace-question-annotations";
 import { Button } from "@/components/ui/button";
+import { ViewModeSwitch } from "@/components/view-mode-switch";
 import { apiKeyHeader } from "@/lib/api-keys/schemas";
 import {
   type PipelineVersion,
@@ -354,16 +365,78 @@ function PipelineRunner({
           </p>
         </div>
         {questions.length ? (
-          <PipelineQuestions
+          <PipelineTestQuestions
             pipelineId={pipeline.id}
             questions={questions}
-            answers={run.data?.answers}
+            result={run.data}
           />
         ) : (
           <p className="text-sm text-muted-foreground">Definition pending.</p>
         )}
       </section>
     </div>
+  );
+}
+
+function PipelineTestQuestions({
+  pipelineId,
+  questions,
+  result,
+}: {
+  pipelineId: string;
+  questions: NamedQuestion[];
+  result: Awaited<ReturnType<typeof runStoredPipeline>> | undefined;
+}) {
+  const [showJson, setShowJson] = useState(false);
+  const viewMode = (
+    <ViewModeSwitch showJson={showJson} onChange={setShowJson} />
+  );
+  const traceId = result?.traceId;
+  const annotation = result?.traceAnnotation;
+  if (!traceId || !annotation) {
+    return (
+      <div className="space-y-3">
+        {viewMode}
+        <PipelineQuestions
+          pipelineId={pipelineId}
+          questions={questions}
+          answers={result?.answers}
+          showJson={showJson}
+        />
+      </div>
+    );
+  }
+  return (
+    <TraceAnnotationEditor
+      key={traceId}
+      traceId={traceId}
+      pipelineId={annotation.pipelineId}
+      serverSignedTraceProof={annotation.serverSignedTraceProof}
+      questionLinks={new Map(annotation.questionLinks)}
+    >
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center gap-2">
+          {viewMode}
+          <TraceDetailLink traceId={traceId} showJson={showJson} />
+          <FinishTraceAnnotation />
+        </div>
+        <PipelineQuestions
+          pipelineId={pipelineId}
+          questions={questions}
+          answers={result.answers}
+          showJson={showJson}
+          renderAnswer={(question, answer) => (
+            <TraceAnswer {...question} answer={answer} />
+          )}
+          jsonFooter={
+            <TraceQuestionAnnotations
+              questions={questions}
+              answers={result.answers}
+            />
+          }
+        />
+      </div>
+    </TraceAnnotationEditor>
   );
 }
 

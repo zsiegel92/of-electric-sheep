@@ -17,7 +17,7 @@ import {
 import {
   modelList,
   systemOneRequest,
-  systemOneResponse,
+  tracedSystemOneResponse,
 } from "@/lib/system-one/typesafe-api-schemas";
 import { routeGroup } from "../route-group";
 import { systemOneRoutes } from "./routes";
@@ -62,7 +62,7 @@ export const systemOneRouter = apiKeyAuth.router({
     requestBody: decisionRequestBody,
   })
     .input(decisionInput)
-    .output(systemOneResponse)
+    .output(tracedSystemOneResponse)
     .handler(({ input: { body, headers }, context: { user } }) =>
       processDecision(
         body,
@@ -92,7 +92,7 @@ export const systemOneRouter = apiKeyAuth.router({
         }),
       }),
     )
-    .output(systemOneResponse)
+    .output(tracedSystemOneResponse)
     .handler(
       async ({
         input: {
@@ -109,7 +109,7 @@ export const systemOneRouter = apiKeyAuth.router({
           headers[exactPipelineHeader] === "true",
         );
         if (!result) throw errors.NOT_FOUND();
-        return result;
+        return result.decision;
       },
     ),
 } satisfies Record<keyof typeof systemOneRoutes, AnyProcedure>);

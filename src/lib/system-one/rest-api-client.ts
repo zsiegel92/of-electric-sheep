@@ -1,7 +1,10 @@
 import type { z } from "zod";
 import { apiKeyHeader, apiKeySecret } from "@/lib/api-keys/schemas";
 import { systemOneRoutes } from "@/server/system-one/routes";
-import { systemOneRequest, systemOneResponse } from "./typesafe-api-schemas";
+import {
+  systemOneRequest,
+  tracedSystemOneResponse,
+} from "./typesafe-api-schemas";
 
 export type SystemOneInput = z.input<typeof systemOneRequest>;
 
@@ -32,5 +35,5 @@ export async function decide(
     );
   }
 
-  return systemOneResponse.parse(await response.json());
+  return tracedSystemOneResponse.parse(await response.json());
 }

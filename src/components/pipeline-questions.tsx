@@ -25,12 +25,14 @@ export function PipelineQuestions({
   answers,
   showJson,
   renderAnswer,
+  jsonFooter,
 }: {
   questions: NamedQuestion[];
   pipelineId?: string | undefined;
   answers?: Answers | undefined;
   showJson?: boolean;
   renderAnswer?: RenderAnswer;
+  jsonFooter?: ReactNode;
 }) {
   const [localJson, setLocalJson] = useState(false);
   return (
@@ -39,11 +41,14 @@ export function PipelineQuestions({
         <ViewModeSwitch showJson={localJson} onChange={setLocalJson} />
       )}
       {(showJson ?? localJson) ? (
-        <QuestionJsonColumns
-          questions={questions}
-          answers={answers}
-          pipelineId={pipelineId}
-        />
+        <>
+          <QuestionJsonColumns
+            questions={questions}
+            answers={answers}
+            pipelineId={pipelineId}
+          />
+          {jsonFooter}
+        </>
       ) : (
         <QuestionCards
           questions={questions}
