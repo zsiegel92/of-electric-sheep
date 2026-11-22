@@ -10,6 +10,7 @@ import {
   listPipelineVersions,
   promoteDecisionPipeline,
   saveQuestionLinks,
+  setPipelineQuestionAlias,
   updatePipelineMetadata,
 } from "@/lib/decisions/queries";
 import {
@@ -102,6 +103,18 @@ export const updatePipeline = createServerFn({ method: "POST" })
       pipelineId,
       metadata,
     ),
+  );
+
+export const updateQuestionAlias = createServerFn({ method: "POST" })
+  .validator(
+    z.object({
+      pipelineId: id,
+      questionName: z.string().min(1),
+      alias: z.string().trim().min(1).max(100).nullable(),
+    }),
+  )
+  .handler(({ data, context }) =>
+    setPipelineQuestionAlias(requireUser(context.user).githubId, data),
   );
 
 export const updateQuestionLinks = createServerFn({ method: "POST" })

@@ -10,8 +10,10 @@ import { useState } from "react";
 import { z } from "zod";
 import { CurlPreview } from "@/components/curl-preview";
 import { PageHeader } from "@/components/page-header";
+import { PipelineName } from "@/components/pipeline-name";
 import { PipelineQuestions } from "@/components/pipeline-questions";
 import { PipelineTracesLink } from "@/components/pipeline-view-links";
+import { usePipelineQuestions } from "@/components/question-name";
 import { Button } from "@/components/ui/button";
 import { apiKeyHeader } from "@/lib/api-keys/schemas";
 import {
@@ -77,6 +79,10 @@ function PipelineRunner({
   baseUrl: string;
 }) {
   const { exact, test } = Route.useSearch();
+  const { data: questions = pipeline.questions } = usePipelineQuestions(
+    pipeline.id,
+    pipeline.questions,
+  );
   const navigate = Route.useNavigate();
   const router = useRouter();
   const [error, setError] = useState("");
@@ -112,9 +118,7 @@ function PipelineRunner({
       <div className="space-y-2">
         <PageHeader
           title="View, Test, Edit Pipeline"
-          pipelineName={
-            pipeline.displayName ?? pipeline.model ?? "Definition pending"
-          }
+          pipelineName={<PipelineName pipeline={pipeline} />}
           actions={<PipelineTracesLink pipelineId={pipeline.id} />}
         />
         <p className="break-all font-mono text-sm text-muted-foreground">
@@ -349,9 +353,10 @@ function PipelineRunner({
                 : ""}
           </p>
         </div>
-        {pipeline.questions.length ? (
+        {questions.length ? (
           <PipelineQuestions
-            questions={pipeline.questions}
+            pipelineId={pipeline.id}
+            questions={questions}
             answers={run.data?.answers}
           />
         ) : (

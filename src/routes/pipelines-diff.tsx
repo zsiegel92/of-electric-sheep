@@ -7,6 +7,7 @@ import {
   PipelineComparison,
   pipelineSnapshot,
 } from "@/components/pipeline-diff";
+import { QuestionName } from "@/components/question-name";
 import { Button } from "@/components/ui/button";
 import { ViewModeSwitch } from "@/components/view-mode-switch";
 import {
@@ -245,14 +246,20 @@ function Comparison({
     return {
       key: `left-${question.name}`,
       leftName: question.name,
+      leftAlias: question.alias,
       rightName: match?.name,
+      rightAlias: match?.alias,
     };
   });
   const rows = [
     ...pairs,
     ...right.questions
       .filter((q) => !paired.has(q.name))
-      .map((q) => ({ key: `right-${q.name}`, rightName: q.name })),
+      .map((q) => ({
+        key: `right-${q.name}`,
+        rightName: q.name,
+        rightAlias: q.alias,
+      })),
   ];
   const needsLinks =
     leftLinks.size !== left.questions.length ||
@@ -294,7 +301,7 @@ function Comparison({
           <div className="grid gap-2 sm:grid-cols-2">
             {version.questions.map((question) => (
               <label key={question.name} className="min-w-0 space-y-1 text-sm">
-                <span className="break-all font-medium">{question.name}</span>
+                <QuestionName name={question.name} alias={question.alias} />
                 <select
                   className="block w-full rounded-md border bg-background px-2 py-2 text-sm"
                   value={draft.get(question.name) ?? ""}
@@ -320,7 +327,9 @@ function Comparison({
                     )
                     .map((target) => (
                       <option key={target.name} value={target.name}>
-                        {target.name}
+                        {target.alias && target.alias !== target.name
+                          ? `${target.alias} (${target.name})`
+                          : target.name}
                       </option>
                     ))}
                 </select>

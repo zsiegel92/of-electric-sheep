@@ -1,16 +1,13 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
-import { Pencil } from "lucide-react";
 import { useState } from "react";
 import { z } from "zod";
+import { PipelineName } from "@/components/pipeline-name";
 import { PipelineQuestions } from "@/components/pipeline-questions";
 import { PipelineViewLinks } from "@/components/pipeline-view-links";
+import { usePipelineQuestions } from "@/components/question-name";
 import { Button } from "@/components/ui/button";
-import {
-  getPipelineQuestions,
-  listPipelines,
-  updatePipeline,
-} from "@/server/pipelines";
+import { listPipelines, updatePipeline } from "@/server/pipelines";
 
 export const Route = createFileRoute("/pipelines/")({
   validateSearch: z.object({
@@ -148,13 +145,9 @@ function PipelineRow({
   showIgnored: boolean | undefined;
 }) {
   const router = useRouter();
-  const [draftName, setDraftName] = useState<string>();
   const update = useMutation({
     mutationFn: updatePipeline,
-    onSuccess: async () => {
-      await router.invalidate();
-      setDraftName(undefined);
-    },
+    onSuccess: () => router.invalidate(),
   });
   const isPrimary = pipeline.id === pipeline.primaryGroupedPipelineId;
 
@@ -163,81 +156,31 @@ function PipelineRow({
       className={`flex flex-wrap items-stretch gap-3 px-4 py-3 ${isPrimary ? "bg-muted" : ""}`}
     >
       <div className="min-w-0 flex-1 space-y-1">
-        {draftName === undefined ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="break-all text-sm font-medium">
-              {pipeline.displayName ?? pipeline.model ?? "Definition pending"}
-            </p>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-xs"
-              aria-label="Rename pipeline"
-              title="Rename pipeline"
-              disabled={update.isPending}
-              onClick={() => {
-                update.reset();
-                setDraftName(pipeline.displayName ?? "");
-              }}
-            >
-              <Pencil aria-hidden="true" />
-            </Button>
-            <Button
-              type="button"
-              size="xs"
-              variant="ghost"
-              disabled={update.isPending}
-              onClick={() => {
-                update.mutate({
-                  data: {
-                    pipelineId: pipeline.id,
-                    uiIgnored: !pipeline.uiIgnored,
-                  },
-                });
-              }}
-            >
-              {pipeline.uiIgnored ? "Unignore" : "Ignore"}
-            </Button>
-            <span className="text-xs text-muted-foreground">
-              {isPrimary ? "Primary" : "Version"}
-              {pipeline.uiIgnored && " · Ignored"}
-            </span>
-          </div>
-        ) : (
-          <form
-            className="flex flex-wrap items-center gap-2"
-            onSubmit={(event) => {
-              event.preventDefault();
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="min-w-0 text-sm font-medium">
+            <PipelineName pipeline={pipeline} />
+          </span>
+          <Button
+            type="button"
+            size="xs"
+            variant="ghost"
+            disabled={update.isPending}
+            onClick={() =>
               update.mutate({
-                data: { pipelineId: pipeline.id, displayName: draftName },
-              });
-            }}
+                data: {
+                  pipelineId: pipeline.id,
+                  uiIgnored: !pipeline.uiIgnored,
+                },
+              })
+            }
           >
-            <input
-              aria-label="Pipeline name"
-              className="min-w-0 rounded-md border bg-background px-2 py-1 text-sm"
-              value={draftName}
-              maxLength={100}
-              placeholder={pipeline.model ?? "Pipeline name"}
-              onChange={(event) => setDraftName(event.currentTarget.value)}
-            />
-            <Button type="submit" size="xs" disabled={update.isPending}>
-              Save
-            </Button>
-            <Button
-              type="button"
-              size="xs"
-              variant="ghost"
-              disabled={update.isPending}
-              onClick={() => {
-                update.reset();
-                setDraftName(undefined);
-              }}
-            >
-              Cancel
-            </Button>
-          </form>
-        )}
+            {pipeline.uiIgnored ? "Unignore" : "Ignore"}
+          </Button>
+          <span className="text-xs text-muted-foreground">
+            {isPrimary ? "Primary" : "Version"}
+            {pipeline.uiIgnored && " · Ignored"}
+          </span>
+        </div>
         <p className="break-all font-mono text-xs text-muted-foreground">
           {pipeline.id}
         </p>
@@ -283,12 +226,7 @@ function PipelineRow({
 
 function PipelineQuestionDetails({ pipelineId }: { pipelineId: string }) {
   const [open, setOpen] = useState(false);
-  const questions = useQuery({
-    queryKey: ["pipeline-questions", pipelineId],
-    queryFn: () => getPipelineQuestions({ data: pipelineId }),
-    enabled: open,
-    retry: false,
-  });
+  const questions = usePipelineQuestions(pipelineId, undefined, open);
   return (
     <details
       className="basis-full"
@@ -318,7 +256,10 @@ function PipelineQuestionDetails({ pipelineId }: { pipelineId: string }) {
               Loading questions…
             </p>
           ) : questions.data?.length ? (
-            <PipelineQuestions questions={questions.data} />
+            <PipelineQuestions
+              pipelineId={pipelineId}
+              questions={questions.data}
+            />
           ) : (
             <p className="text-sm text-muted-foreground">Definition pending.</p>
           )}

@@ -7,7 +7,7 @@ export function PageHeader({
   controls,
 }: {
   title: string;
-  pipelineName?: string;
+  pipelineName?: ReactNode;
   actions?: ReactNode;
   controls?: ReactNode;
 }) {

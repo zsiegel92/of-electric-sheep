@@ -5,6 +5,7 @@ import { ExpandableDataValue } from "@/components/expandable-data-value";
 import { PageHeader } from "@/components/page-header";
 import { PipelineQuestions } from "@/components/pipeline-questions";
 import { PipelineViewLinks } from "@/components/pipeline-view-links";
+import { QuestionName } from "@/components/question-name";
 import {
   FinishTraceAnnotation,
   TraceAnnotationEditor,
@@ -112,8 +113,8 @@ function TraceDetail() {
                   key={question.name}
                   className="min-w-0 space-y-2 rounded-lg border p-3"
                 >
-                  <p className="font-mono text-sm wrap-anywhere">
-                    {question.name}
+                  <p className="text-sm">
+                    <QuestionName name={question.name} alias={question.alias} />
                   </p>
                   <TraceAnswer
                     {...question}

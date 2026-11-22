@@ -4,8 +4,12 @@ import type { PipelineQuestion } from "@/lib/decisions/question-links";
 import type { systemOneResponse } from "@/lib/system-one/typesafe-api-schemas";
 import { cn } from "@/lib/utils";
 import { Content, DataText } from "./data-value";
+import { QuestionName } from "./question-name";
 
-export type NamedQuestion = Pick<PipelineQuestion, "name" | "question">;
+export type NamedQuestion = Pick<
+  PipelineQuestion,
+  "name" | "alias" | "question"
+>;
 export type Answers = z.output<typeof systemOneResponse>["answers"];
 type Answer = Answers[string];
 
@@ -22,11 +26,16 @@ const percent = new Intl.NumberFormat("en", {
 });
 const score = new Intl.NumberFormat("en", { maximumFractionDigits: 3 });
 
-function QuestionLabel({ name, question }: NamedQuestion) {
+function QuestionLabel({
+  name,
+  alias,
+  question,
+  pipelineId,
+}: NamedQuestion & { pipelineId?: string | undefined }) {
   return (
     <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-      <span className="font-mono text-sm font-medium wrap-anywhere">
-        {name}
+      <span className="min-w-0 text-sm">
+        <QuestionName name={name} alias={alias} pipelineId={pipelineId} />
       </span>
       <span className="text-xs text-muted-foreground">
         {typeLabels[question.type]}
@@ -37,16 +46,24 @@ function QuestionLabel({ name, question }: NamedQuestion) {
 
 export function QuestionView({
   name,
+  alias,
+  pipelineId,
   question,
   showJson,
   indentJson = false,
 }: NamedQuestion & {
+  pipelineId?: string | undefined;
   showJson?: boolean;
   indentJson?: boolean;
 }) {
   return (
     <>
-      <QuestionLabel name={name} question={question} />
+      <QuestionLabel
+        name={name}
+        alias={alias}
+        question={question}
+        pipelineId={pipelineId}
+      />
       {showJson ? (
         <DataText value={question} indent={indentJson} />
       ) : (

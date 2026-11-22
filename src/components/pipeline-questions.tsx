@@ -1,5 +1,11 @@
 import { type ReactNode, useState } from "react";
-import { AlignedJsonColumns, jsonProperty } from "./aligned-json-columns";
+import {
+  AlignedJsonColumns,
+  type JsonRow,
+  jsonProperty,
+} from "./aligned-json-columns";
+import { JsonText } from "./json-text";
+import { QuestionName } from "./question-name";
 import {
   type Answers,
   AnswerView,
@@ -15,11 +21,13 @@ type RenderAnswer = (
 
 export function PipelineQuestions({
   questions,
+  pipelineId,
   answers,
   showJson,
   renderAnswer,
 }: {
   questions: NamedQuestion[];
+  pipelineId?: string | undefined;
   answers?: Answers | undefined;
   showJson?: boolean;
   renderAnswer?: RenderAnswer;
@@ -31,10 +39,15 @@ export function PipelineQuestions({
         <ViewModeSwitch showJson={localJson} onChange={setLocalJson} />
       )}
       {(showJson ?? localJson) ? (
-        <QuestionJsonColumns questions={questions} answers={answers} />
+        <QuestionJsonColumns
+          questions={questions}
+          answers={answers}
+          pipelineId={pipelineId}
+        />
       ) : (
         <QuestionCards
           questions={questions}
+          pipelineId={pipelineId}
           answers={answers}
           renderAnswer={renderAnswer}
         />
@@ -45,9 +58,11 @@ export function PipelineQuestions({
 
 function QuestionJsonColumns({
   questions,
+  pipelineId,
   answers,
 }: {
   questions: NamedQuestion[];
+  pipelineId?: string | undefined;
   answers: Answers | undefined;
 }) {
   const definitions = Object.fromEntries(
@@ -59,7 +74,29 @@ function QuestionJsonColumns({
       (name) => !Object.hasOwn(definitions, name),
     ),
   ];
-  const columns = [{ label: "Questions", rows: jsonRows(definitions, names) }];
+  const byKey = new Map(
+    questions.map((question) => [`entry:${question.name}`, question]),
+  );
+  const rows = jsonRows(definitions, names).map((row): JsonRow => {
+    const question = byKey.get(row.key);
+    if (!question || (!pipelineId && !question.alias)) return row;
+    return {
+      ...row,
+      content: (
+        <>
+          <span className="block select-none text-sm">
+            <QuestionName
+              name={question.name}
+              alias={question.alias}
+              pipelineId={pipelineId}
+            />
+          </span>
+          <JsonText text={row.text} />
+        </>
+      ),
+    };
+  });
+  const columns = [{ label: "Questions", rows }];
   if (answers)
     columns.push({ label: "Answers", rows: jsonRows(answers, names) });
 
@@ -82,17 +119,20 @@ function jsonRows(values: Record<string, unknown>, names: string[]) {
 
 function QuestionCards({
   questions,
+  pipelineId,
   answers,
   renderAnswer,
 }: {
   questions: NamedQuestion[];
+  pipelineId?: string | undefined;
   answers: Answers | undefined;
   renderAnswer: RenderAnswer | undefined;
 }) {
   const showAnswers = answers || renderAnswer;
   return (
     <ul className="space-y-3">
-      {questions.map(({ name, question }) => {
+      {questions.map((definition) => {
+        const { name, question } = definition;
         const answer =
           answers && Object.hasOwn(answers, name) ? answers[name] : undefined;
         return (
@@ -101,7 +141,7 @@ function QuestionCards({
             className={`grid overflow-hidden rounded-lg border bg-background ${showAnswers ? "md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]" : ""}`}
           >
             <div className="min-w-0 space-y-3 p-4">
-              <QuestionView name={name} question={question} />
+              <QuestionView {...definition} pipelineId={pipelineId} />
             </div>
             {showAnswers && (
               <div className="min-w-0 space-y-2 border-t bg-muted/50 p-4 md:border-t-0 md:border-l">
@@ -109,7 +149,7 @@ function QuestionCards({
                   Answer
                 </p>
                 {renderAnswer ? (
-                  renderAnswer({ name, question }, answer)
+                  renderAnswer(definition, answer)
                 ) : (
                   <AnswerView answer={answer} question={question} />
                 )}

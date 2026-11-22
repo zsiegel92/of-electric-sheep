@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowRight } from "lucide-react";
 import { z } from "zod";
 import { PageHeader } from "@/components/page-header";
 import { PipelineEditorLink } from "@/components/pipeline-view-links";
+import { usePipelineQuestions } from "@/components/question-name";
 import { TraceTable } from "@/components/traces/trace-table";
 import { Button } from "@/components/ui/button";
 import { ViewModeSwitch } from "@/components/view-mode-switch";
@@ -40,6 +41,10 @@ export const Route = createFileRoute("/traces/$pipelineId")({
 
 function PipelineTraces() {
   const data = Route.useLoaderData();
+  const { data: questions = data.pipeline.questions } = usePipelineQuestions(
+    data.pipeline.id,
+    data.pipeline.questions,
+  );
   const { json = false, status, order, after, until } = Route.useSearch();
   return (
     <div className="space-y-6">
@@ -50,16 +55,17 @@ function PipelineTraces() {
         controls={<TraceViewMode />}
       />
       <TraceFilters />
-      {data.traces.length ? (
+      {(data.traces.length > 0 || questions.length > 0) && (
         <TraceTable
           key={JSON.stringify([data.pipeline.id, status, order, after, until])}
           pipelineId={data.pipeline.id}
           removeFinished={status === "unannotated"}
-          questions={data.pipeline.questions}
+          questions={questions}
           traces={data.traces}
           showJson={json}
         />
-      ) : (
+      )}
+      {!data.traces.length && (
         <p className="text-sm text-muted-foreground">
           {data.configured
             ? "No matching traces on this page."

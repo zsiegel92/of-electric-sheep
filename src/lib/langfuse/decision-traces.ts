@@ -189,18 +189,19 @@ export async function findDecisionTrace(
       if (!pipelineId || span.traceId !== id) continue;
       const pipeline = await findOwnedPipeline(pipelineId);
       if (!pipeline) continue;
+      const stored = new Map(
+        pipeline.questions.map((question) => [question.name, question]),
+      );
       const input = recordedQuestions.safeParse(span.input).data;
       const questions = input
         ? Object.entries(input.questions).map(([name, question]) => ({
             name,
+            alias: stored.get(name)?.alias ?? null,
             question,
           }))
         : pipeline.questions;
-      const stored = new Map(
-        pipeline.questions.map(({ name, question }) => [name, question]),
-      );
       const annotationQuestions = questions.flatMap(({ name, question }) => {
-        const definition = stored.get(name);
+        const definition = stored.get(name)?.question;
         if (definition?.type !== question.type) return [];
         const keys = new Set(
           annotationChoices(definition).map(({ key }) => key),

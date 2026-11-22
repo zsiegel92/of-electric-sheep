@@ -1,4 +1,4 @@
-import { Check, Undo2 } from "lucide-react";
+import { Check } from "lucide-react";
 import { Tooltip } from "radix-ui";
 import { createContext, type ReactNode, useContext, useState } from "react";
 import {
@@ -18,7 +18,7 @@ import { saveTraceAnnotation } from "@/server/traces";
 type QuestionSave = {
   choiceKey?: string | null;
   pending?: boolean;
-  error?: "save" | "undo";
+  error?: "save" | "remove";
 };
 type AnnotationEditor = {
   saved: Map<string, string>;
@@ -73,7 +73,7 @@ export function TraceAnnotationEditor({
       update({ choiceKey });
       if (choiceKey === null) setDone(false);
     } catch {
-      update({ ...current, error: choiceKey === null ? "undo" : "save" });
+      update({ ...current, error: choiceKey === null ? "remove" : "save" });
     }
   }
 
@@ -136,7 +136,7 @@ export function TraceAnswer({
   indentJson,
   choices = annotationChoices(question),
   controlsOnly = false,
-}: NamedQuestion & {
+}: Pick<NamedQuestion, "name" | "question"> & {
   answer: Answers[string] | undefined;
   showJson?: boolean | undefined;
   indentJson?: boolean | undefined;
@@ -215,11 +215,11 @@ function CorrectChoice({
             variant="ghost"
             size="xs"
             className="h-5"
-            aria-label={`Undo annotation for ${name}`}
+            aria-label={`Remove label for ${name}`}
             disabled={change?.pending}
             onClick={() => void editor.save(name, null)}
           >
-            <Undo2 aria-hidden="true" /> Undo
+            Remove label
           </Button>
         )}
       </div>
@@ -274,8 +274,8 @@ function CorrectChoice({
       )}
       {change?.error && (
         <p role="alert" className="text-xs text-destructive">
-          {change.error === "undo"
-            ? "Couldn’t undo. Click Undo to retry."
+          {change.error === "remove"
+            ? "Couldn’t remove the label. Try again."
             : "Couldn’t save. Click the choice to retry."}
         </p>
       )}

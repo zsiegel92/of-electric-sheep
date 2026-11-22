@@ -8,6 +8,7 @@ import {
   decisionPipelineQuestions,
   decisionPipelines,
   decisionQuestionLinks,
+  pipelineQuestionAliases,
   users,
 } from "@/lib/db/schema";
 import { question } from "@/lib/system-one/typesafe-api-schemas";
@@ -146,6 +147,7 @@ export async function listPipelineVersions(
       model: decisionPipelineDefinitions.model,
       options: decisionPipelineDefinitions.options,
       name: decisionPipelineQuestions.name,
+      alias: pipelineQuestionAliases.alias,
       answerShape: decisionPipelineQuestions.answerShape,
       primaryName: decisionQuestionLinks.primaryName,
       question: sql<unknown>`jsonb_build_object('type', ${decisionPipelineQuestions.type})
@@ -164,6 +166,19 @@ export async function listPipelineVersions(
       eq(
         decisionPipelineQuestions.pipelineId,
         decisionPipelineDefinitions.pipelineId,
+      ),
+    )
+    .leftJoin(
+      pipelineQuestionAliases,
+      and(
+        eq(
+          pipelineQuestionAliases.pipelineId,
+          decisionPipelineQuestions.pipelineId,
+        ),
+        eq(
+          pipelineQuestionAliases.questionName,
+          decisionPipelineQuestions.name,
+        ),
       ),
     )
     .leftJoin(
@@ -193,6 +208,7 @@ export async function listPipelineVersions(
   const versions = new Map<string, PipelineVersion>();
   for (const {
     name,
+    alias,
     answerShape,
     primaryName,
     question: value,
@@ -208,6 +224,7 @@ export async function listPipelineVersions(
     if (name !== null && answerShape !== null) {
       version.questions.push({
         name,
+        alias,
         answerShape,
         primaryName,
         question: question.parse(value),
@@ -233,6 +250,54 @@ export async function updatePipelineMetadata(
     )
     .returning({ id: decisionPipelines.id });
   if (!pipeline) throw new Error("Pipeline not found.");
+}
+
+export async function setPipelineQuestionAlias(
+  userId: string,
+  {
+    pipelineId,
+    questionName,
+    alias,
+  }: { pipelineId: string; questionName: string; alias: string | null },
+) {
+  return getDb().transaction(async (tx) => {
+    const aliases = pipelineQuestionAliases;
+    const [owned] = await tx
+      .select({ name: decisionPipelineQuestions.name })
+      .from(decisionPipelineQuestions)
+      .innerJoin(
+        decisionPipelines,
+        eq(decisionPipelines.id, decisionPipelineQuestions.pipelineId),
+      )
+      .where(
+        and(
+          eq(decisionPipelines.userId, userId),
+          eq(decisionPipelineQuestions.pipelineId, pipelineId),
+          eq(decisionPipelineQuestions.name, questionName),
+        ),
+      )
+      .for("key share");
+    if (!owned) throw new Error("Question not found.");
+    if (alias === null) {
+      await tx
+        .delete(aliases)
+        .where(
+          and(
+            eq(aliases.pipelineId, pipelineId),
+            eq(aliases.questionName, questionName),
+          ),
+        );
+    } else {
+      await tx
+        .insert(aliases)
+        .values({ pipelineId, questionName, alias })
+        .onConflictDoUpdate({
+          target: [aliases.pipelineId, aliases.questionName],
+          set: { alias },
+        });
+    }
+    return alias;
+  });
 }
 
 export async function findPipelineVersions(

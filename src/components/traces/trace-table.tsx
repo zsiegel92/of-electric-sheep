@@ -38,12 +38,6 @@ export function TraceTable({
 }) {
   const [finished, setFinished] = useState(new Set<string>());
   const visible = traces.filter(({ traceId }) => !finished.has(traceId));
-  if (!visible.length)
-    return (
-      <p className="text-sm text-muted-foreground">
-        No traces left on this page.
-      </p>
-    );
   return (
     <section
       aria-label="Decision traces"
@@ -69,11 +63,16 @@ export function TraceTable({
             {questions.map((question) => (
               <TraceTableCell
                 key={question.name}
-                label={question.name}
+                label={question.alias ?? question.name}
                 scope="col"
                 className="w-56 min-w-56"
               >
-                <QuestionView {...question} showJson={showJson} indentJson />
+                <QuestionView
+                  {...question}
+                  pipelineId={pipelineId}
+                  showJson={showJson}
+                  indentJson
+                />
               </TraceTableCell>
             ))}
           </TraceTableRow>
@@ -128,8 +127,11 @@ export function TraceTable({
                       <DataValue value={state} showJson={showJson} indentJson />
                     )}
                   </TraceTableCell>
-                  {questions.map(({ name, question }) => (
-                    <TraceTableCell key={name} label={`${name} answer`}>
+                  {questions.map(({ name, alias, question }) => (
+                    <TraceTableCell
+                      key={name}
+                      label={`${alias ?? name} answer`}
+                    >
                       <TraceAnswer
                         name={name}
                         answer={
@@ -149,6 +151,11 @@ export function TraceTable({
           )}
         </tbody>
       </table>
+      {traces.length > 0 && visible.length === 0 && (
+        <p className="p-3 text-sm text-muted-foreground">
+          No traces left on this page.
+        </p>
+      )}
     </section>
   );
 }

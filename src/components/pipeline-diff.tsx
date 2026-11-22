@@ -8,13 +8,16 @@ import {
   jsonProperty,
 } from "./aligned-json-columns";
 import { JsonText } from "./json-text";
+import { QuestionName } from "./question-name";
 
 type Snapshot = Omit<PipelineDraft, "model" | "options"> &
   Pick<PipelineVersion, "model" | "options">;
 export type QuestionPair = {
   key: string;
   leftName?: string | undefined;
+  leftAlias?: string | null | undefined;
   rightName?: string | undefined;
+  rightAlias?: string | null | undefined;
 };
 
 export function pipelineSnapshot(version: PipelineVersion): Snapshot {
@@ -197,20 +200,32 @@ export function PipelineComparison({
         ))}
       </section>
       <h2 className="pt-2 font-medium">Question differences</h2>
-      {pairs.map(({ key, leftName, rightName }) => {
+      {pairs.map(({ key, leftName, leftAlias, rightName, rightAlias }) => {
         const a = leftName === undefined ? undefined : left.questions[leftName];
         const b =
           rightName === undefined ? undefined : right.questions[rightName];
         return (
           <section key={key} className="overflow-hidden rounded-lg border">
             <h3 className="bg-muted px-3 py-2 text-sm font-medium break-all">
-              {leftName ?? rightName}
+              <QuestionName
+                name={leftName ?? rightName ?? ""}
+                alias={
+                  (leftName === undefined ? rightAlias : leftAlias) ?? null
+                }
+              />
             </h3>
             <FieldDiff
               label="Question name"
               before={leftName}
               after={rightName}
             />
+            {(leftAlias || rightAlias) && (
+              <FieldDiff
+                label="Question alias"
+                before={leftAlias ?? undefined}
+                after={rightAlias ?? undefined}
+              />
+            )}
             {questionFields.map(([field, title]) => {
               const before =
                 field === "criteria"

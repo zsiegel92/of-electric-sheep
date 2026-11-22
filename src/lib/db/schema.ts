@@ -197,3 +197,26 @@ export const decisionTraceAnnotations = pgTable(
     }).onDelete("cascade"),
   ],
 );
+
+export const pipelineQuestionAliases = pgTable(
+  "pipeline_question_aliases",
+  {
+    pipelineId: uuid("pipeline_id").notNull(),
+    questionName: text("question_name").notNull(),
+    alias: text().notNull(),
+  },
+  (table) => [
+    primaryKey({
+      name: "pipeline_question_aliases_pk",
+      columns: [table.pipelineId, table.questionName],
+    }),
+    foreignKey({
+      name: "pipeline_question_aliases_question_fk",
+      columns: [table.pipelineId, table.questionName],
+      foreignColumns: [
+        decisionPipelineQuestions.pipelineId,
+        decisionPipelineQuestions.name,
+      ],
+    }).onDelete("cascade"),
+  ],
+);

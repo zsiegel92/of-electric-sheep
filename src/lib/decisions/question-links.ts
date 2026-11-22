@@ -2,6 +2,7 @@ import type { PipelineDefinition } from "./pipeline-schemas";
 
 export type PipelineQuestion = {
   name: string;
+  alias: string | null;
   answerShape: string;
   primaryName: string | null;
   question: PipelineDefinition["questions"][string];
