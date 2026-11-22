@@ -1,4 +1,4 @@
-.PHONY: install env db db-stop dev build start check db-generate db-migrate db-studio
+.PHONY: install env db db-stop dev build start check favicon db-generate db-migrate db-studio
 
 install:
 	pnpm install --frozen-lockfile
@@ -24,6 +24,9 @@ start:
 check:
 	pnpm lint
 	pnpm typecheck
+
+favicon:
+	pnpm favicon
 
 db-generate:
 	pnpm db:generate

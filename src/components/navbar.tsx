@@ -20,8 +20,16 @@ export function Navbar() {
           <Link
             to="/"
             activeOptions={{ exact: true }}
-            className="mr-1 rounded-sm text-base font-semibold tracking-tight focus-visible:outline-2 focus-visible:outline-ring"
+            className="mr-1 inline-flex items-center gap-1 rounded-sm text-base font-semibold tracking-tight focus-visible:outline-2 focus-visible:outline-ring"
           >
+            <img
+              src="/favicon-48x48.png"
+              srcSet="/favicon-48x48.png 1x, /sheep.png 4x"
+              alt=""
+              width={48}
+              height={48}
+              className="shrink-0 [image-rendering:pixelated]"
+            />
             OfElectricSheep
           </Link>
           {user && (

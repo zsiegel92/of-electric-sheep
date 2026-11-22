@@ -10,6 +10,7 @@
     "dev": "concurrently --kill-others --names web,inngest \"pnpm dev:web\" \"pnpm dev:inngest\"",
     "build": "vite build",
     "start": "node --env-file-if-exists=.env .output/server/index.mjs",
+    "favicon": "node scripts/generate-favicon.ts",
     "lint": "biome ci .",
     "typecheck": "tsc",
     "db:generate": "drizzle-kit generate",
