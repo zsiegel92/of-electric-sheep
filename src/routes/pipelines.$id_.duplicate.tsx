@@ -1,14 +1,16 @@
 import { useMutation } from "@tanstack/react-query";
-import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import { createFileRoute, notFound } from "@tanstack/react-router";
 import { useState } from "react";
 import Editor from "react-simple-code-editor";
 import { z } from "zod";
 import { JsonText } from "@/components/json-text";
+import { PageHeader } from "@/components/page-header";
 import {
   PipelineComparison,
   pipelineSnapshot,
   type QuestionPair,
 } from "@/components/pipeline-diff";
+import { PipelineEditorLink } from "@/components/pipeline-view-links";
 import { Button } from "@/components/ui/button";
 import { ViewModeSwitch } from "@/components/view-mode-switch";
 import {
@@ -180,37 +182,33 @@ function DraftEditor({
 
   return (
     <div className="space-y-5">
-      <Link
-        to="/pipelines/$id"
-        params={{ id }}
-        search={{}}
-        className="text-sm underline"
-      >
-        Back to pipeline
-      </Link>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">Evolve pipeline</h1>
-        <div className="flex flex-wrap items-center gap-3">
-          <ViewModeSwitch
-            showJson={json === true}
-            onChange={(value) => {
-              void navigate({
-                search: { json: value || undefined },
-                replace: true,
-              });
-            }}
-          />
-          <Button
-            type="button"
-            disabled={
-              !hasChanges || !!fieldError || !!jsonError || save.isPending
-            }
-            onClick={() => save.mutate({ data: { sourceId: id, draft } })}
-          >
-            {save.isPending ? "Saving…" : "Save new pipeline"}
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Evolve pipeline"
+        actions={<PipelineEditorLink pipelineId={id} />}
+        controls={
+          <div className="flex flex-wrap items-center gap-2">
+            <ViewModeSwitch
+              showJson={json === true}
+              onChange={(value) => {
+                void navigate({
+                  search: { json: value || undefined },
+                  replace: true,
+                });
+              }}
+            />
+            <Button
+              type="button"
+              size="sm"
+              disabled={
+                !hasChanges || !!fieldError || !!jsonError || save.isPending
+              }
+              onClick={() => save.mutate({ data: { sourceId: id, draft } })}
+            >
+              {save.isPending ? "Saving…" : "Save new pipeline"}
+            </Button>
+          </div>
+        }
+      />
       <section className="space-y-3 rounded-lg border p-4">
         <h2 className="font-medium">
           {json ? (

@@ -10,6 +10,9 @@ import { decisionObservationName, type observation, traceId } from "./schemas";
 
 type Observation = z.output<typeof observation>;
 
+const recordedState = systemOneRequest.pick({ state: true });
+const recordedQuestions = systemOneRequest.pick({ questions: true });
+
 function decisionPipelineId(span: Observation) {
   if (span.name !== decisionObservationName || span.type !== "GENERATION")
     return;
@@ -24,6 +27,7 @@ function decisionTrace(span: Observation) {
     startTime: span.startTime,
     model: output?.model ?? span.model,
     failed: span.level === "ERROR",
+    state: recordedState.safeParse(span.input).data?.state,
     answers: output?.answers,
     usage: output?.usage,
   };
@@ -91,9 +95,7 @@ export async function findDecisionTrace(
       if (!pipelineId || span.traceId !== id) continue;
       const pipeline = await findOwnedPipeline(pipelineId);
       if (!pipeline) continue;
-      const input = systemOneRequest
-        .pick({ state: true, questions: true })
-        .safeParse(span.input).data;
+      const input = recordedQuestions.safeParse(span.input).data;
       return {
         pipeline: {
           id: pipeline.id,
@@ -106,7 +108,6 @@ export async function findDecisionTrace(
               question,
             }))
           : pipeline.questions,
-        state: input?.state,
         langfuseUrl: langfuseTraceUrl(config.baseUrl, span),
       };
     }

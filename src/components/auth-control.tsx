@@ -6,6 +6,12 @@ import type { User } from "../lib/auth";
 export function AuthControl({ user }: { user: User | null | undefined }) {
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false);
+  const name = user?.name.trim();
+  const label = user
+    ? name && name !== user.email
+      ? `Sign out ${name}`
+      : "Sign out"
+    : "Sign in with GitHub";
 
   async function toggleAuth() {
     setPending(true);
@@ -28,23 +34,25 @@ export function AuthControl({ user }: { user: User | null | undefined }) {
 
   return (
     <div>
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2">
         {user && (
-          <div className="text-right text-sm break-all">
-            {user.name && user.name !== user.email && (
-              <p className="font-medium">{user.name}</p>
-            )}
-            <p className="text-muted-foreground">{user.email}</p>
-          </div>
+          <span
+            className="truncate text-xs text-muted-foreground"
+            title={user.email}
+          >
+            {user.email}
+          </span>
         )}
         <Button
           type="button"
-          size="sm"
+          size="xs"
           variant={user ? "outline" : "default"}
+          className="min-w-0 shrink"
           disabled={pending}
+          title={label}
           onClick={() => void toggleAuth()}
         >
-          {user ? "Sign out" : "Sign in with GitHub"}
+          <span className="truncate">{label}</span>
         </Button>
       </div>
       {failed && (

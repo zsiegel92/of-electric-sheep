@@ -2,7 +2,7 @@ import type { JsonValue } from "@typesafe-ai/sdk";
 import type { z } from "zod";
 import type { PipelineQuestion } from "@/lib/decisions/question-links";
 import type { systemOneResponse } from "@/lib/system-one/typesafe-api-schemas";
-import { JsonText } from "./json-text";
+import { Content, DataText } from "./data-value";
 
 export type NamedQuestion = Pick<PipelineQuestion, "name" | "question">;
 export type Answers = z.output<typeof systemOneResponse>["answers"];
@@ -21,7 +21,7 @@ const percent = new Intl.NumberFormat("en", {
 });
 const score = new Intl.NumberFormat("en", { maximumFractionDigits: 3 });
 
-export function QuestionLabel({ name, question }: NamedQuestion) {
+function QuestionLabel({ name, question }: NamedQuestion) {
   return (
     <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
       <span className="font-mono text-sm font-medium wrap-anywhere">
@@ -38,13 +38,16 @@ export function QuestionView({
   name,
   question,
   showJson,
-  hideLabel,
-}: NamedQuestion & { showJson?: boolean; hideLabel?: boolean }) {
+  indentJson = false,
+}: NamedQuestion & {
+  showJson?: boolean;
+  indentJson?: boolean;
+}) {
   return (
     <>
-      {!hideLabel && <QuestionLabel name={name} question={question} />}
+      <QuestionLabel name={name} question={question} />
       {showJson ? (
-        <JsonValueView value={question} />
+        <DataText value={question} indent={indentJson} />
       ) : (
         <>
           {question.instructions != null && (
@@ -57,69 +60,21 @@ export function QuestionView({
   );
 }
 
-export function JsonValueView({
-  value,
-  compact,
-}: {
-  value: JsonValue;
-  compact?: boolean | undefined;
-}) {
-  return (
-    <pre
-      className={`font-mono text-xs wrap-anywhere whitespace-pre-wrap ${compact ? "max-h-24 overflow-auto" : ""}`}
-    >
-      <JsonText text={JSON.stringify(value, null, compact ? undefined : 2)} />
-    </pre>
-  );
-}
-
 export function AnswerView({
   answer,
   showJson,
-  compact,
+  indentJson = false,
 }: {
   answer: Answer | undefined;
   showJson?: boolean;
-  compact?: boolean;
+  indentJson?: boolean;
 }) {
   if (!answer)
     return <p className="text-sm text-muted-foreground">No answer returned.</p>;
   return showJson ? (
-    <JsonValueView value={answer} compact={compact} />
+    <DataText value={answer} indent={indentJson} />
   ) : (
-    <QuestionAnswer answer={answer} compact={compact} />
-  );
-}
-
-export function Content({ value }: { value: JsonValue }) {
-  if (value === null || typeof value !== "object") {
-    return (
-      <p className="text-sm whitespace-pre-wrap wrap-anywhere">
-        {String(value)}
-      </p>
-    );
-  }
-  const entries = Object.entries(value);
-  if (entries.length === 0) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        {Array.isArray(value) ? "Empty list" : "Empty object"}
-      </p>
-    );
-  }
-  return (
-    <dl className="space-y-1 border-l pl-3">
-      {entries.map(([key, entry]) => (
-        <div key={key} className="text-sm">
-          <dt className="font-medium wrap-anywhere">
-            {Array.isArray(value) ? Number(key) + 1 : key}
-          </dt>
-          <dd>
-            <Content value={entry} />
-          </dd>
-        </div>
-      ))}
-    </dl>
+    <QuestionAnswer answer={answer} />
   );
 }
 
@@ -197,13 +152,16 @@ function ProbabilityList({
   );
 }
 
-function QuestionAnswer({
-  answer,
-  compact,
-}: {
-  answer: Answer;
-  compact: boolean | undefined;
-}) {
+function AnswerConfidence({ value }: { value: number | null }) {
+  if (value === null) return null;
+  return (
+    <p className="text-xs text-muted-foreground tabular-nums">
+      {percent.format(value)} confidence
+    </p>
+  );
+}
+
+function QuestionAnswer({ answer }: { answer: Answer }) {
   switch (answer.type) {
     case "noul":
       return (
@@ -223,34 +181,22 @@ function QuestionAnswer({
               ? answer.choice
               : `Expected score ${score.format(answer.score)}`}
           </p>
-          {!compact && (
-            <>
-              <p className="text-xs text-muted-foreground">
-                {percent.format(answer.confidence)} confidence
-              </p>
-              <ProbabilityList
-                values={answer.probabilities}
-                label={
-                  answer.type === "choice"
-                    ? "Choice probabilities"
-                    : "Rubric probabilities"
-                }
-                descriptions={
-                  answer.type === "score" ? answer.legend : undefined
-                }
-              />
-            </>
-          )}
+          <AnswerConfidence value={answer.confidence} />
+          <ProbabilityList
+            values={answer.probabilities}
+            label={
+              answer.type === "choice"
+                ? "Choice probabilities"
+                : "Rubric probabilities"
+            }
+            descriptions={answer.type === "score" ? answer.legend : undefined}
+          />
         </>
       );
     case "box":
       return (
         <>
-          {answer.confidence !== null && (
-            <p className="text-sm">
-              {percent.format(answer.confidence)} confidence
-            </p>
-          )}
+          <AnswerConfidence value={answer.confidence} />
           <ProbabilityList
             values={{
               Top: answer.box.top,

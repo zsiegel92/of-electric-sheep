@@ -33,7 +33,7 @@ function Document({ children }: { children: ReactNode }) {
       </head>
       <body>
         <Navbar />
-        <main className="px-6 py-8 sm:px-10 lg:px-16">{children}</main>
+        <main className="app-gutters pt-4 pb-8">{children}</main>
         <Scripts />
       </body>
     </html>

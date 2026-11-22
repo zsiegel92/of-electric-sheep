@@ -9,6 +9,7 @@ import { Tabs } from "radix-ui";
 import { useState } from "react";
 import { z } from "zod";
 import { CurlPreview } from "@/components/curl-preview";
+import { PageHeader } from "@/components/page-header";
 import { PipelineQuestions } from "@/components/pipeline-questions";
 import { PipelineTracesLink } from "@/components/pipeline-view-links";
 import { Button } from "@/components/ui/button";
@@ -108,13 +109,14 @@ function PipelineRunner({
 
   return (
     <div className="space-y-6">
-      <header className="space-y-2">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <h1 className="min-w-0 text-2xl font-semibold wrap-anywhere">
-            {pipeline.displayName ?? pipeline.model ?? "Definition pending"}
-          </h1>
-          <PipelineTracesLink pipelineId={pipeline.id} />
-        </div>
+      <div className="space-y-2">
+        <PageHeader
+          title="View, Test, Edit Pipeline"
+          pipelineName={
+            pipeline.displayName ?? pipeline.model ?? "Definition pending"
+          }
+          actions={<PipelineTracesLink pipelineId={pipeline.id} />}
+        />
         <p className="break-all font-mono text-sm text-muted-foreground">
           {pipeline.id}
         </p>
@@ -166,7 +168,7 @@ function PipelineRunner({
             {promote.error.message}
           </p>
         )}
-      </header>
+      </div>
       <section
         className="space-y-3 rounded-lg border p-4"
         aria-labelledby="pipeline-test"

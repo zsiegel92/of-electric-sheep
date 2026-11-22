@@ -38,39 +38,37 @@ function Pipelines() {
   );
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">Pipelines</h1>
-        <div className="flex flex-wrap items-center gap-4 text-sm">
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={showIgnored === true}
-              onChange={(event) => {
-                void navigate({
-                  search: {
-                    showIgnored: event.currentTarget.checked || undefined,
-                  },
-                  replace: true,
-                });
-              }}
-            />
-            Show ignored
-          </label>
-          <Button
-            asChild={canCompare}
-            disabled={!canCompare}
-            variant="outline"
-            size="sm"
-          >
-            {canCompare ? (
-              <Link to="/pipelines-diff" search={{ showIgnored }}>
-                Compare pipelines
-              </Link>
-            ) : (
-              "Compare pipelines"
-            )}
-          </Button>
-        </div>
+      <h1 className="sr-only">Pipelines</h1>
+      <div className="flex flex-wrap items-center justify-end gap-4 text-sm">
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={showIgnored === true}
+            onChange={(event) => {
+              void navigate({
+                search: {
+                  showIgnored: event.currentTarget.checked || undefined,
+                },
+                replace: true,
+              });
+            }}
+          />
+          Show ignored
+        </label>
+        <Button
+          asChild={canCompare}
+          disabled={!canCompare}
+          variant="outline"
+          size="sm"
+        >
+          {canCompare ? (
+            <Link to="/pipelines-diff" search={{ showIgnored }}>
+              Compare pipelines
+            </Link>
+          ) : (
+            "Compare pipelines"
+          )}
+        </Button>
       </div>
       {visible.length === 0 && (
         <p className="rounded-md border p-5 text-sm text-muted-foreground">

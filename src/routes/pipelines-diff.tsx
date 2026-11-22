@@ -2,6 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { z } from "zod";
+import { PageHeader } from "@/components/page-header";
 import {
   PipelineComparison,
   pipelineSnapshot,
@@ -91,29 +92,34 @@ function PipelineDiff() {
 
   return (
     <div className="space-y-6">
-      <Link
-        to="/pipelines"
-        search={{ showIgnored: search.showIgnored }}
-        className="text-sm underline"
-      >
-        Pipelines
-      </Link>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">
-          {search.associate
+      <PageHeader
+        title={
+          search.associate
             ? "Associate with a primary pipeline"
-            : "Compare pipelines"}
-        </h1>
-        <ViewModeSwitch
-          showJson={search.json === true}
-          onChange={(json) => {
-            void navigate({
-              search: (previous) => ({ ...previous, json: json || undefined }),
-              replace: true,
-            });
-          }}
-        />
-      </div>
+            : "Compare pipelines"
+        }
+        actions={
+          <Button asChild size="sm" variant="outline">
+            <Link to="/pipelines" search={{ showIgnored: search.showIgnored }}>
+              Pipelines
+            </Link>
+          </Button>
+        }
+        controls={
+          <ViewModeSwitch
+            showJson={search.json === true}
+            onChange={(json) => {
+              void navigate({
+                search: (previous) => ({
+                  ...previous,
+                  json: json || undefined,
+                }),
+                replace: true,
+              });
+            }}
+          />
+        }
+      />
       <div className="grid gap-3 sm:grid-cols-2">
         {(["id1", "id2"] as const).map((key, index) => {
           const current = key === "id1" ? left : right;
