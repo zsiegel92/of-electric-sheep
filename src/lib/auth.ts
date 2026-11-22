@@ -1,7 +1,8 @@
 import "@tanstack/react-start/server-only";
 import { betterAuth } from "better-auth";
-import { createAuthMiddleware } from "better-auth/api";
+import { APIError, createAuthMiddleware } from "better-auth/api";
 import { z } from "zod";
+import { authorizedGitHubId } from "./github-access";
 import { inngest, userSignedIn } from "./inngest/inngest";
 import { zodUserSchemaToBetterAuthUserSpec } from "./zod-user-spec";
 
@@ -19,6 +20,9 @@ export const userSchema = z.object({
 });
 
 export type User = z.infer<typeof userSchema>;
+export const authorizedUserSchema = userSchema.extend({
+  githubId: authorizedGitHubId,
+});
 
 const githubProfile = z.object({ id: z.int().positive() });
 const sessionLifetimeSeconds = 14 * 24 * 60 * 60;
@@ -64,7 +68,15 @@ function createAuth() {
               clientId: env.GITHUB_CLIENT_ID,
               clientSecret: env.GITHUB_CLIENT_SECRET,
               mapProfileToUser(profile) {
-                return { githubId: String(githubProfile.parse(profile).id) };
+                const githubId = authorizedGitHubId.safeParse(
+                  String(githubProfile.parse(profile).id),
+                );
+                if (!githubId.success) {
+                  throw new APIError("FORBIDDEN", {
+                    message: "This GitHub account is not allowed to sign in.",
+                  });
+                }
+                return { githubId: githubId.data };
               },
             },
           }
@@ -81,7 +93,7 @@ export function getAuth() {
 
 export async function getUser(headers: Headers): Promise<User | null> {
   const session = await getAuth().api.getSession({ headers });
-  return session ? userSchema.parse(session.user) : null;
+  return authorizedUserSchema.safeParse(session?.user).data ?? null;
 }
 
 export function requireUser(user: User | null): User {

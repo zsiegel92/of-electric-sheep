@@ -1,7 +1,7 @@
 import "@tanstack/react-start/server-only";
 import { createHash, randomBytes } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
-import { type User, userSchema } from "@/lib/auth";
+import { authorizedUserSchema, type User } from "@/lib/auth";
 import { getDb } from "@/lib/db/db";
 import { apiKeys, users } from "@/lib/db/schema";
 import { apiKeyHeader, apiKeySecret } from "./schemas";
@@ -23,7 +23,7 @@ export async function findApiKeyUser(headers: Headers): Promise<User | null> {
     .from(apiKeys)
     .innerJoin(users, eq(apiKeys.userId, users.githubId))
     .where(eq(apiKeys.keyHash, hashKey(secret.data)));
-  const result = userSchema.safeParse(owner);
+  const result = authorizedUserSchema.safeParse(owner);
   return result.success ? result.data : null;
 }
 

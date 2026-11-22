@@ -77,6 +77,12 @@ await test("decision processing integration", async (t) => {
   const events: UsageEvent[] = [];
   const traces: ReturnType<typeof decisionTraceCompleted.create>[] = [];
   const testUsers: User[] = [];
+  const originalAllowlist = process.env["ALLOWED_GITHUB_USER_IDS"];
+  t.after(() => {
+    if (originalAllowlist === undefined)
+      delete process.env["ALLOWED_GITHUB_USER_IDS"];
+    else process.env["ALLOWED_GITHUB_USER_IDS"] = originalAllowlist;
+  });
   const newUser = (): User => {
     const user = {
       githubId: randomUUID(),
@@ -84,6 +90,9 @@ await test("decision processing integration", async (t) => {
       email: "decision@example.invalid",
     };
     testUsers.push(user);
+    process.env["ALLOWED_GITHUB_USER_IDS"] = testUsers
+      .map(({ githubId }) => githubId)
+      .join(",");
     return user;
   };
   const server = createServer(async (request, response) => {
