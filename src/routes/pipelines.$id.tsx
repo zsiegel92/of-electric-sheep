@@ -10,6 +10,7 @@ import { useState } from "react";
 import { z } from "zod";
 import { CurlPreview } from "@/components/curl-preview";
 import { PipelineQuestions } from "@/components/pipeline-questions";
+import { PipelineTracesLink } from "@/components/pipeline-view-links";
 import { Button } from "@/components/ui/button";
 import { apiKeyHeader } from "@/lib/api-keys/schemas";
 import {
@@ -106,14 +107,14 @@ function PipelineRunner({
   const routing = exact === true ? { [exactPipelineHeader]: "true" } : {};
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6 py-8">
-      <Link to="/pipelines" className="text-sm underline">
-        Pipelines
-      </Link>
+    <div className="space-y-6">
       <header className="space-y-2">
-        <h1 className="text-2xl font-semibold">
-          {pipeline.displayName ?? pipeline.model ?? "Definition pending"}
-        </h1>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <h1 className="min-w-0 text-2xl font-semibold wrap-anywhere">
+            {pipeline.displayName ?? pipeline.model ?? "Definition pending"}
+          </h1>
+          <PipelineTracesLink pipelineId={pipeline.id} />
+        </div>
         <p className="break-all font-mono text-sm text-muted-foreground">
           {pipeline.id}
         </p>
@@ -355,7 +356,7 @@ function PipelineRunner({
           <p className="text-sm text-muted-foreground">Definition pending.</p>
         )}
       </section>
-    </main>
+    </div>
   );
 }
 

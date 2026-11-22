@@ -90,7 +90,7 @@ function PipelineDiff() {
   const anchor = primary ?? (canAttach ? left : undefined);
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6 py-8">
+    <div className="space-y-6">
       <Link
         to="/pipelines"
         search={{ showIgnored: search.showIgnored }}
@@ -188,7 +188,7 @@ function PipelineDiff() {
               : "Select two different pipelines to compare."}
         </p>
       )}
-    </main>
+    </div>
   );
 }
 

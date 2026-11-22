@@ -61,7 +61,7 @@ function ApiKeys() {
   const inputClass = "min-w-0 rounded-md border px-3 py-1.5 text-sm";
 
   return (
-    <main className="space-y-4 py-8">
+    <div className="space-y-4">
       <h1 className="text-2xl font-semibold">API keys</h1>
       <TypeSafeApiBaseUrl />
       <form
@@ -132,6 +132,6 @@ function ApiKeys() {
           ))}
         </ul>
       )}
-    </main>
+    </div>
   );
 }

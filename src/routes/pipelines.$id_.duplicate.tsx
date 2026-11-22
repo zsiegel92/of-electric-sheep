@@ -179,7 +179,7 @@ function DraftEditor({
     pairs.push({ key: `new-${name}`, leftName: undefined, rightName: name });
 
   return (
-    <main className="mx-auto max-w-5xl space-y-5 py-8">
+    <div className="space-y-5">
       <Link
         to="/pipelines/$id"
         params={{ id }}
@@ -440,6 +440,6 @@ function DraftEditor({
         showJson={json === true}
         rightLabel="Draft"
       />
-    </main>
+    </div>
   );
 }

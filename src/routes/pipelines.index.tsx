@@ -1,9 +1,10 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
-import { ArrowUpRight, Pencil } from "lucide-react";
+import { Pencil } from "lucide-react";
 import { useState } from "react";
 import { z } from "zod";
 import { PipelineQuestions } from "@/components/pipeline-questions";
+import { PipelineViewLinks } from "@/components/pipeline-view-links";
 import { Button } from "@/components/ui/button";
 import {
   getPipelineQuestions,
@@ -36,7 +37,7 @@ function Pipelines() {
     ([key, pipelines]) => key !== null && pipelines.length > 1,
   );
   return (
-    <main className="mx-auto max-w-5xl space-y-6 py-8">
+    <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold">Pipelines</h1>
         <div className="flex flex-wrap items-center gap-4 text-sm">
@@ -133,7 +134,7 @@ function Pipelines() {
           })}
         </section>
       ))}
-    </main>
+    </div>
   );
 }
 
@@ -253,7 +254,7 @@ function PipelineRow({
           </p>
         )}
       </div>
-      <div className="flex items-stretch gap-4 text-sm">
+      <div className="flex flex-wrap items-center gap-4 text-sm">
         {canAssociate && (
           <Link
             to="/pipelines-diff"
@@ -275,14 +276,7 @@ function PipelineRow({
             Compare
           </Link>
         )}
-        <Link
-          to="/pipelines/$id"
-          params={{ id: pipeline.id }}
-          search={{}}
-          className="-my-3 -mr-4 flex min-h-20 min-w-28 items-center justify-center gap-2 border-l border-foreground/25 bg-gradient-to-r from-muted to-background px-4 font-medium transition-colors hover:from-accent hover:to-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
-        >
-          Open <ArrowUpRight className="size-4" aria-hidden="true" />
-        </Link>
+        <PipelineViewLinks pipelineId={pipeline.id} />
       </div>
       <PipelineQuestionDetails pipelineId={pipeline.id} />
     </li>

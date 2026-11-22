@@ -2,6 +2,7 @@ import "@tanstack/react-start/server-only";
 import { ORPCError } from "@orpc/server";
 import type { User } from "@/lib/auth";
 import { inngest } from "@/lib/inngest/inngest";
+import { decisionObservationName } from "@/lib/langfuse/schemas";
 import { traceGeneration } from "@/lib/langfuse/tracing";
 import { runDecision } from "@/lib/system-one/system-one-api-client";
 import {
@@ -52,7 +53,7 @@ function runPipeline(
   definition: PipelineDefinition,
 ) {
   return traceGeneration(
-    "decisions.process",
+    decisionObservationName,
     { pipelineId: pipeline.id },
     async (generation) => {
       if (generation) {
