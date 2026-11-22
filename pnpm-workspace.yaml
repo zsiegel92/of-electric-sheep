@@ -2,21 +2,3 @@ allowBuilds:
   esbuild: true
   protobufjs: false
   inngest-cli: true
-minimumReleaseAgeExclude:
-  - "@orpc/client@1.16.3"
-  - "@orpc/contract@1.16.3"
-  - "@orpc/interop@1.16.3"
-  - "@orpc/json-schema@1.16.3"
-  - "@orpc/openapi-client@1.16.3"
-  - "@orpc/openapi@1.16.3"
-  - "@orpc/server@1.16.3"
-  - "@orpc/shared@1.16.3"
-  - "@orpc/standard-server-aws-lambda@1.16.3"
-  - "@orpc/standard-server-fastify@1.16.3"
-  - "@orpc/standard-server-fetch@1.16.3"
-  - "@orpc/standard-server-node@1.16.3"
-  - "@orpc/standard-server-peer@1.16.3"
-  - "@orpc/standard-server@1.16.3"
-  - "@orpc/zod@1.16.3"
-  - "@ai-sdk/gateway@4.0.150"
-  - ai@7.0.177
