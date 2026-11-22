@@ -2,6 +2,7 @@ import type { JsonValue } from "@typesafe-ai/sdk";
 import type { z } from "zod";
 import type { PipelineQuestion } from "@/lib/decisions/question-links";
 import type { systemOneResponse } from "@/lib/system-one/typesafe-api-schemas";
+import { cn } from "@/lib/utils";
 import { Content, DataText } from "./data-value";
 
 export type NamedQuestion = Pick<PipelineQuestion, "name" | "question">;
@@ -62,10 +63,12 @@ export function QuestionView({
 
 export function AnswerView({
   answer,
+  question,
   showJson,
   indentJson = false,
 }: {
   answer: Answer | undefined;
+  question: NamedQuestion["question"];
   showJson?: boolean;
   indentJson?: boolean;
 }) {
@@ -74,7 +77,7 @@ export function AnswerView({
   return showJson ? (
     <DataText value={answer} indent={indentJson} />
   ) : (
-    <QuestionAnswer answer={answer} />
+    <QuestionAnswer answer={answer} question={question} />
   );
 }
 
@@ -95,6 +98,8 @@ function QuestionCriteria({
     question.type === "noul"
       ? entries.filter(([, value]) => value != null)
       : entries;
+  if (question.type === "choice")
+    shown.sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
   if (!shown.length) return null;
 
   const heading =
@@ -126,25 +131,49 @@ function ProbabilityList({
   values,
   label,
   descriptions,
+  selected,
 }: {
   values: Record<string, number>;
   label: string;
   descriptions?: Record<string, JsonValue> | undefined;
+  selected?: { name: string; confidence: number; options: string[] };
 }) {
+  const names = Object.keys(values);
+  const ordered = selected
+    ? [...new Set([...selected.options, ...names, selected.name])].sort()
+    : names;
   return (
-    <dl aria-label={label} className="divide-y text-sm">
-      {Object.entries(values).map(([name, value]) => {
+    <dl aria-label={label} className={cn("text-sm", !selected && "divide-y")}>
+      {ordered.map((name) => {
+        const value = Object.hasOwn(values, name) ? values[name] : undefined;
+        const winner = name === selected?.name;
         const description =
           descriptions && Object.hasOwn(descriptions, name)
             ? descriptions[name]
             : undefined;
         return (
-          <div key={name} className="flex justify-between gap-2 py-1.5">
-            <dt className="wrap-anywhere">
+          <div
+            key={name}
+            className={cn(
+              "flex items-baseline justify-between gap-2",
+              selected ? "rounded px-1.5 py-0.5" : "py-1.5",
+              winner && "bg-muted font-semibold",
+            )}
+          >
+            <dt
+              className={cn(
+                "min-w-0 wrap-anywhere",
+                winner && "flex flex-wrap items-baseline gap-x-2",
+              )}
+            >
+              {winner && <span className="sr-only">Selected </span>}
               {name}
+              {winner && <AnswerConfidence value={selected.confidence} />}
               {description != null && <Content value={description} />}
             </dt>
-            <dd className="shrink-0 tabular-nums">{percent.format(value)}</dd>
+            <dd className="shrink-0 tabular-nums">
+              {value === undefined ? "—" : percent.format(value)}
+            </dd>
           </div>
         );
       })}
@@ -155,13 +184,19 @@ function ProbabilityList({
 function AnswerConfidence({ value }: { value: number | null }) {
   if (value === null) return null;
   return (
-    <p className="text-xs text-muted-foreground tabular-nums">
+    <p className="text-xs font-normal text-muted-foreground tabular-nums">
       {percent.format(value)} confidence
     </p>
   );
 }
 
-function QuestionAnswer({ answer }: { answer: Answer }) {
+function QuestionAnswer({
+  answer,
+  question,
+}: {
+  answer: Answer;
+  question: NamedQuestion["question"];
+}) {
   switch (answer.type) {
     case "noul":
       return (
@@ -173,23 +208,29 @@ function QuestionAnswer({ answer }: { answer: Answer }) {
         </p>
       );
     case "choice":
+      return (
+        <ProbabilityList
+          values={answer.probabilities}
+          label="Choice probabilities"
+          selected={{
+            name: answer.choice,
+            confidence: answer.confidence,
+            options:
+              question.type === "choice" ? Object.keys(question.criteria) : [],
+          }}
+        />
+      );
     case "score":
       return (
         <>
           <p className="text-sm font-semibold wrap-anywhere">
-            {answer.type === "choice"
-              ? answer.choice
-              : `Expected score ${score.format(answer.score)}`}
+            Expected score {score.format(answer.score)}
           </p>
           <AnswerConfidence value={answer.confidence} />
           <ProbabilityList
             values={answer.probabilities}
-            label={
-              answer.type === "choice"
-                ? "Choice probabilities"
-                : "Rubric probabilities"
-            }
-            descriptions={answer.type === "score" ? answer.legend : undefined}
+            label="Rubric probabilities"
+            descriptions={answer.legend}
           />
         </>
       );

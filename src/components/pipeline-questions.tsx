@@ -94,7 +94,7 @@ function QuestionCards({
                 <p className="text-xs font-medium text-muted-foreground">
                   Answer
                 </p>
-                <AnswerView answer={answer} />
+                <AnswerView answer={answer} question={question} />
               </div>
             )}
           </li>

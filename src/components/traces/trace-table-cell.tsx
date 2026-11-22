@@ -50,7 +50,7 @@ export function TraceTableCell({
   children,
 }: {
   label: string;
-  scope?: "col" | "row";
+  scope?: "col";
   className?: string;
   children: ReactNode;
 }) {
