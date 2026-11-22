@@ -1,6 +1,6 @@
 import type { JsonValue } from "@typesafe-ai/sdk";
 import { useState } from "react";
-import { DataValue } from "@/components/data-value";
+import { DataText } from "@/components/data-value";
 import { TraceDetailLink } from "@/components/pipeline-view-links";
 import {
   type Answers,
@@ -130,7 +130,7 @@ export function TraceTable({
                         No input recorded.
                       </p>
                     ) : (
-                      <DataValue value={state} showJson={showJson} indentJson />
+                      <DataText value={state} indent />
                     )}
                   </TraceTableCell>
                   {questions.map(({ name, alias, question }) => (
