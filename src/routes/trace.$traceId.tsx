@@ -6,7 +6,6 @@ import { PipelineQuestions } from "@/components/pipeline-questions";
 import { PipelineViewLinks } from "@/components/pipeline-view-links";
 import { ObservabilityLink } from "@/components/traces/observability-link";
 import {
-  FinishTraceAnnotation,
   TraceAnnotationEditor,
   TraceAnswer,
 } from "@/components/traces/trace-annotation";
@@ -50,7 +49,6 @@ function TraceDetail() {
               <div className="flex flex-wrap items-center gap-2">
                 <TraceViewMode />
                 <ObservabilityLink href={trace.observabilityUrl} />
-                <FinishTraceAnnotation />
               </div>
             }
           />
