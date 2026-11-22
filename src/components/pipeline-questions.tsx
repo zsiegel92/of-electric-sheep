@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { AlignedJsonColumns, jsonProperty } from "./aligned-json-columns";
 import {
   type Answers,
@@ -8,14 +8,21 @@ import {
 } from "./question-view";
 import { ViewModeSwitch } from "./view-mode-switch";
 
+type RenderAnswer = (
+  question: NamedQuestion,
+  answer: Answers[string] | undefined,
+) => ReactNode;
+
 export function PipelineQuestions({
   questions,
   answers,
   showJson,
+  renderAnswer,
 }: {
   questions: NamedQuestion[];
   answers?: Answers | undefined;
   showJson?: boolean;
+  renderAnswer?: RenderAnswer;
 }) {
   const [localJson, setLocalJson] = useState(false);
   return (
@@ -26,7 +33,11 @@ export function PipelineQuestions({
       {(showJson ?? localJson) ? (
         <QuestionJsonColumns questions={questions} answers={answers} />
       ) : (
-        <QuestionCards questions={questions} answers={answers} />
+        <QuestionCards
+          questions={questions}
+          answers={answers}
+          renderAnswer={renderAnswer}
+        />
       )}
     </div>
   );
@@ -72,10 +83,13 @@ function jsonRows(values: Record<string, unknown>, names: string[]) {
 function QuestionCards({
   questions,
   answers,
+  renderAnswer,
 }: {
   questions: NamedQuestion[];
   answers: Answers | undefined;
+  renderAnswer: RenderAnswer | undefined;
 }) {
+  const showAnswers = answers || renderAnswer;
   return (
     <ul className="space-y-3">
       {questions.map(({ name, question }) => {
@@ -84,17 +98,21 @@ function QuestionCards({
         return (
           <li
             key={name}
-            className={`grid overflow-hidden rounded-lg border bg-background ${answers ? "md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]" : ""}`}
+            className={`grid overflow-hidden rounded-lg border bg-background ${showAnswers ? "md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]" : ""}`}
           >
             <div className="min-w-0 space-y-3 p-4">
               <QuestionView name={name} question={question} />
             </div>
-            {answers && (
+            {showAnswers && (
               <div className="min-w-0 space-y-2 border-t bg-muted/50 p-4 md:border-t-0 md:border-l">
                 <p className="text-xs font-medium text-muted-foreground">
                   Answer
                 </p>
-                <AnswerView answer={answer} question={question} />
+                {renderAnswer ? (
+                  renderAnswer({ name, question }, answer)
+                ) : (
+                  <AnswerView answer={answer} question={question} />
+                )}
               </div>
             )}
           </li>

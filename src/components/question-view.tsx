@@ -190,6 +190,21 @@ function AnswerConfidence({ value }: { value: number | null }) {
   );
 }
 
+export function ScoreAnswerSummary({
+  answer,
+}: {
+  answer: Extract<Answer, { type: "score" }>;
+}) {
+  return (
+    <>
+      <p className="text-sm font-semibold wrap-anywhere">
+        Expected score {score.format(answer.score)}
+      </p>
+      <AnswerConfidence value={answer.confidence} />
+    </>
+  );
+}
+
 function QuestionAnswer({
   answer,
   question,
@@ -223,10 +238,7 @@ function QuestionAnswer({
     case "score":
       return (
         <>
-          <p className="text-sm font-semibold wrap-anywhere">
-            Expected score {score.format(answer.score)}
-          </p>
-          <AnswerConfidence value={answer.confidence} />
+          <ScoreAnswerSummary answer={answer} />
           <ProbabilityList
             values={answer.probabilities}
             label="Rubric probabilities"

@@ -170,3 +170,30 @@ export const decisionQuestionLinks = pgTable(
     }).onDelete("cascade"),
   ],
 );
+
+export const decisionTraceAnnotations = pgTable(
+  "decision_trace_annotations",
+  {
+    pipelineId: uuid("pipeline_id").notNull(),
+    traceId: text("trace_id").notNull(),
+    questionName: text("question_name").notNull(),
+    choiceKey: text("choice_key").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({
+      name: "decision_trace_annotations_pk",
+      columns: [table.pipelineId, table.traceId, table.questionName],
+    }),
+    foreignKey({
+      name: "decision_trace_annotations_question_fk",
+      columns: [table.pipelineId, table.questionName],
+      foreignColumns: [
+        decisionPipelineQuestions.pipelineId,
+        decisionPipelineQuestions.name,
+      ],
+    }).onDelete("cascade"),
+  ],
+);

@@ -1,19 +1,29 @@
 import type { JsonValue } from "@typesafe-ai/sdk";
+import { useState } from "react";
 import { DataValue } from "@/components/data-value";
 import { TraceDetailLink } from "@/components/pipeline-view-links";
 import {
   type Answers,
-  AnswerView,
   type NamedQuestion,
   QuestionView,
 } from "@/components/question-view";
+import type { TraceAnnotation } from "@/lib/traces/annotations";
+import {
+  FinishTraceAnnotation,
+  TraceAnnotationEditor,
+  TraceAnswer,
+} from "./trace-annotation";
 import { TraceTableCell, TraceTableRow } from "./trace-table-cell";
 
 export function TraceTable({
+  pipelineId,
   traces,
   questions,
+  removeFinished,
   showJson,
 }: {
+  pipelineId: string;
+  removeFinished: boolean;
   traces: {
     traceId: string;
     startTime: string;
@@ -21,10 +31,19 @@ export function TraceTable({
     failed: boolean;
     state: JsonValue | undefined;
     answers: Answers | undefined;
+    annotations: TraceAnnotation[];
   }[];
   questions: NamedQuestion[];
   showJson: boolean;
 }) {
+  const [finished, setFinished] = useState(new Set<string>());
+  const visible = traces.filter(({ traceId }) => !finished.has(traceId));
+  if (!visible.length)
+    return (
+      <p className="text-sm text-muted-foreground">
+        No traces left on this page.
+      </p>
+    );
   return (
     <section
       aria-label="Decision traces"
@@ -60,47 +79,72 @@ export function TraceTable({
           </TraceTableRow>
         </thead>
         <tbody>
-          {traces.map(
-            ({ traceId, startTime, model, failed, state, answers }) => (
-              <TraceTableRow key={traceId}>
-                <th
-                  scope="row"
-                  className="sticky left-0 z-10 min-w-36 border-b bg-background p-3 align-top text-sm font-normal"
-                >
-                  <TraceDetailLink traceId={traceId} showJson={showJson} />
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    <p className="font-mono" title={traceId}>
-                      {traceId.slice(0, 12)}
-                    </p>
-                    <TraceTime value={startTime} />
-                    {model && <p className="wrap-anywhere">{model}</p>}
-                    {failed && <p className="text-destructive">Failed</p>}
-                  </div>
-                </th>
-                <TraceTableCell label="input">
-                  {state === undefined ? (
-                    <p className="text-sm text-muted-foreground">
-                      No input recorded.
-                    </p>
-                  ) : (
-                    <DataValue value={state} showJson={showJson} indentJson />
-                  )}
-                </TraceTableCell>
-                {questions.map(({ name, question }) => (
-                  <TraceTableCell key={name} label={`${name} answer`}>
-                    <AnswerView
-                      answer={
-                        answers && Object.hasOwn(answers, name)
-                          ? answers[name]
-                          : undefined
-                      }
-                      showJson={showJson}
-                      question={question}
-                      indentJson
-                    />
+          {visible.map(
+            ({
+              traceId,
+              startTime,
+              model,
+              failed,
+              state,
+              answers,
+              annotations,
+            }) => (
+              <TraceAnnotationEditor
+                key={traceId}
+                pipelineId={pipelineId}
+                traceId={traceId}
+                annotations={annotations}
+                finish={
+                  removeFinished
+                    ? () =>
+                        setFinished((current) => new Set(current).add(traceId))
+                    : undefined
+                }
+              >
+                <TraceTableRow>
+                  <th
+                    scope="row"
+                    className="sticky left-0 z-10 min-w-36 border-b bg-background p-3 align-top text-sm font-normal"
+                  >
+                    <TraceDetailLink traceId={traceId} showJson={showJson} />
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      <p className="font-mono" title={traceId}>
+                        {traceId.slice(0, 12)}
+                      </p>
+                      <TraceTime value={startTime} />
+                      {model && <p className="wrap-anywhere">{model}</p>}
+                      {failed && <p className="text-destructive">Failed</p>}
+                    </div>
+                    <div className="mt-2 empty:hidden">
+                      <FinishTraceAnnotation />
+                    </div>
+                  </th>
+                  <TraceTableCell label="input">
+                    {state === undefined ? (
+                      <p className="text-sm text-muted-foreground">
+                        No input recorded.
+                      </p>
+                    ) : (
+                      <DataValue value={state} showJson={showJson} indentJson />
+                    )}
                   </TraceTableCell>
-                ))}
-              </TraceTableRow>
+                  {questions.map(({ name, question }) => (
+                    <TraceTableCell key={name} label={`${name} answer`}>
+                      <TraceAnswer
+                        name={name}
+                        answer={
+                          answers && Object.hasOwn(answers, name)
+                            ? answers[name]
+                            : undefined
+                        }
+                        showJson={showJson}
+                        question={question}
+                        indentJson
+                      />
+                    </TraceTableCell>
+                  ))}
+                </TraceTableRow>
+              </TraceAnnotationEditor>
             ),
           )}
         </tbody>

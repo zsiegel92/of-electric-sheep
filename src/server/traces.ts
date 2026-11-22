@@ -8,6 +8,12 @@ import {
   getPipelineTracePage,
 } from "@/lib/langfuse/decision-traces";
 import { traceId } from "@/lib/langfuse/schemas";
+import {
+  deleteTraceAnnotation,
+  listTraceAnnotations,
+  upsertTraceAnnotation,
+} from "@/lib/traces/annotation-queries";
+import { annotationStatus, traceOrder } from "@/lib/traces/filters";
 
 export const listPipelineTraces = createServerFn()
   .validator(
@@ -15,6 +21,8 @@ export const listPipelineTraces = createServerFn()
       pipelineId: z.uuid(),
       cursor: z.string().optional(),
       until: z.iso.datetime().optional(),
+      status: annotationStatus.optional(),
+      order: traceOrder.optional(),
     }),
   )
   .handler(async ({ data: { pipelineId, ...page }, context }) => {
@@ -42,5 +50,41 @@ export const getDecisionTrace = createServerFn()
       return pipeline;
     });
     if (!trace) throw notFound();
-    return trace;
+    const saved = await listTraceAnnotations(trace.pipeline.id, [data]);
+    return { ...trace, annotations: saved.get(data) ?? [] };
+  });
+
+export const saveTraceAnnotation = createServerFn({ method: "POST" })
+  .validator(
+    z.object({
+      pipelineId: z.uuid(),
+      traceId,
+      questionName: z.string().min(1),
+      choiceKey: z.string().min(1).nullable(),
+    }),
+  )
+  .handler(async ({ data, context }) => {
+    const user = requireUser(context.user);
+    const [pipeline] = await listPipelineVersions(user.githubId, [
+      data.pipelineId,
+    ]);
+    if (!pipeline) throw notFound();
+
+    const { choiceKey, ...key } = data;
+    if (choiceKey === null) {
+      await deleteTraceAnnotation(key);
+      return;
+    }
+
+    const trace = await findDecisionTrace(data.traceId, async (id) =>
+      id === pipeline.id ? pipeline : undefined,
+    );
+    if (!trace) throw notFound();
+    const choices = trace.annotationQuestions.find(
+      ({ name }) => name === data.questionName,
+    )?.choices;
+    if (!choices?.some(({ key }) => key === choiceKey)) {
+      throw new Error("Choose an option from this trace's question.");
+    }
+    await upsertTraceAnnotation({ ...key, choiceKey });
   });

@@ -6,6 +6,12 @@ import { PipelineEditorLink } from "@/components/pipeline-view-links";
 import { TraceTable } from "@/components/traces/trace-table";
 import { Button } from "@/components/ui/button";
 import { ViewModeSwitch } from "@/components/view-mode-switch";
+import {
+  annotationStatus,
+  rankedTraceLimit,
+  traceOrder,
+  traceOrders,
+} from "@/lib/traces/filters";
 import { listPipelineTraces } from "@/server/traces";
 
 export const Route = createFileRoute("/traces/$pipelineId")({
@@ -13,10 +19,14 @@ export const Route = createFileRoute("/traces/$pipelineId")({
     json: z.boolean().optional().catch(undefined),
     after: z.array(z.string().max(4096)).optional().catch(undefined),
     until: z.iso.datetime().optional().catch(undefined),
+    status: annotationStatus.optional().catch(undefined),
+    order: traceOrder.optional().catch(undefined),
   }),
   loaderDeps: ({ search }) => ({
     cursor: search.after?.at(-1),
     until: search.until,
+    status: search.status,
+    order: search.order,
   }),
   loader: ({ params, deps }) => {
     const pipelineId = z.uuid().safeParse(params.pipelineId.toLowerCase());
@@ -30,7 +40,7 @@ export const Route = createFileRoute("/traces/$pipelineId")({
 
 function PipelineTraces() {
   const data = Route.useLoaderData();
-  const { json = false } = Route.useSearch();
+  const { json = false, status, order, after, until } = Route.useSearch();
   return (
     <div className="space-y-6">
       <PageHeader
@@ -39,8 +49,12 @@ function PipelineTraces() {
         actions={<PipelineEditorLink pipelineId={data.pipeline.id} />}
         controls={<TraceViewMode />}
       />
+      <TraceFilters />
       {data.traces.length ? (
         <TraceTable
+          key={JSON.stringify([data.pipeline.id, status, order, after, until])}
+          pipelineId={data.pipeline.id}
+          removeFinished={status === "unannotated"}
           questions={data.pipeline.questions}
           traces={data.traces}
           showJson={json}
@@ -48,12 +62,74 @@ function PipelineTraces() {
       ) : (
         <p className="text-sm text-muted-foreground">
           {data.configured
-            ? "No traces on this page."
+            ? "No matching traces on this page."
             : "Langfuse is not configured."}
         </p>
       )}
       <TracePagination next={data.next} until={data.until} />
     </div>
+  );
+}
+
+function TraceFilters() {
+  const { status = "all", order = "recent" } = Route.useSearch();
+  const navigate = Route.useNavigate();
+  return (
+    <fieldset className="flex flex-wrap items-end gap-x-4 gap-y-2">
+      <legend className="sr-only">Trace filters</legend>
+      <label className="grid gap-1 text-xs font-medium">
+        Annotation status
+        <select
+          className="h-8 rounded-md border bg-background px-2 text-sm"
+          value={status}
+          onChange={(event) => {
+            const status = annotationStatus.parse(event.currentTarget.value);
+            void navigate({
+              search: (previous) => ({
+                ...previous,
+                status: status === "all" ? undefined : status,
+                after: undefined,
+                until: undefined,
+              }),
+            });
+          }}
+        >
+          <option value="all">All traces</option>
+          <option value="unannotated">Un-Annotated</option>
+          <option value="annotated">Annotated</option>
+        </select>
+      </label>
+      <label className="grid gap-1 text-xs font-medium">
+        Order by
+        <select
+          className="h-8 rounded-md border bg-background px-2 text-sm"
+          value={order}
+          onChange={(event) => {
+            const order = traceOrder.parse(event.currentTarget.value);
+            void navigate({
+              search: (previous) => ({
+                ...previous,
+                order: order === "recent" ? undefined : order,
+                after: undefined,
+                until: undefined,
+              }),
+            });
+          }}
+        >
+          {traceOrders.map(({ id, label }) => (
+            <option key={id} value={id}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </label>
+      {order !== "recent" && (
+        <p className="text-xs text-muted-foreground sm:pb-2">
+          Ranks up to {rankedTraceLimit} recent results. Traces without
+          confidence appear last.
+        </p>
+      )}
+    </fieldset>
   );
 }
 
