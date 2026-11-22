@@ -91,9 +91,17 @@ export function TraceAnnotationEditor({
   );
 }
 
-export function FinishTraceAnnotation() {
+export function FinishTraceAnnotation({
+  dirtyOnly = false,
+}: {
+  dirtyOnly?: boolean;
+}) {
   const editor = useContext(AnnotationContext);
-  if (!editor?.saved.size) return null;
+  if (!editor) return null;
+  const dirty = [...editor.changes.values()].some(
+    ({ choiceKey }) => choiceKey !== undefined,
+  );
+  if (!editor.saved.size || (dirtyOnly && !dirty)) return null;
   const pending = [...editor.changes.values()].some(({ pending }) => pending);
   if (editor.done) {
     return (
@@ -120,7 +128,7 @@ export function FinishTraceAnnotation() {
             sideOffset={6}
             className="z-50 max-w-60 rounded-md bg-popover border px-3 py-2 text-xs text-popover-foreground shadow-md"
           >
-            Each choice saves immediately. This trace appears under Annotated
+            Each change saves immediately. The trace’s annotation status updates
             the next time you load the queue.
             {editor.finish && " Done editing removes it from this queue now."}
           </Tooltip.Content>

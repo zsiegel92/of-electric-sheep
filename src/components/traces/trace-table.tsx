@@ -121,7 +121,7 @@ export function TraceTable({
                       <ObservabilityLink href={observabilityUrl} />
                     </div>
                     <div className="mt-2 empty:hidden">
-                      <FinishTraceAnnotation />
+                      <FinishTraceAnnotation dirtyOnly />
                     </div>
                   </th>
                   <TraceTableCell label="input">
