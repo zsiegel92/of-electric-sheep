@@ -1,10 +1,10 @@
 import { createFileRoute, notFound } from "@tanstack/react-router";
-import { ExternalLink } from "lucide-react";
 import { z } from "zod";
 import { ExpandableDataValue } from "@/components/expandable-data-value";
 import { PageHeader } from "@/components/page-header";
 import { PipelineQuestions } from "@/components/pipeline-questions";
 import { PipelineViewLinks } from "@/components/pipeline-view-links";
+import { ObservabilityLink } from "@/components/traces/observability-link";
 import {
   FinishTraceAnnotation,
   TraceAnnotationEditor,
@@ -12,7 +12,6 @@ import {
 } from "@/components/traces/trace-annotation";
 import { TraceQuestionAnnotations } from "@/components/traces/trace-question-annotations";
 import { TraceTime } from "@/components/traces/trace-table";
-import { Button } from "@/components/ui/button";
 import { ViewModeSwitch } from "@/components/view-mode-switch";
 import { traceId } from "@/lib/langfuse/schemas";
 import { getDecisionTrace } from "@/server/traces";
@@ -31,14 +30,8 @@ export const Route = createFileRoute("/trace/$traceId")({
 
 function TraceDetail() {
   const { json = false } = Route.useSearch();
-  const {
-    pipeline,
-    trace,
-    questions,
-    langfuseUrl,
-    annotations,
-    annotationQuestions,
-  } = Route.useLoaderData();
+  const { pipeline, trace, questions, annotations, annotationQuestions } =
+    Route.useLoaderData();
   const choicesByQuestion = new Map(
     annotationQuestions.map(({ name, choices }) => [name, choices]),
   );
@@ -60,7 +53,7 @@ function TraceDetail() {
             controls={
               <div className="flex flex-wrap items-center gap-2">
                 <TraceViewMode />
-                <LangfuseLink href={langfuseUrl} />
+                <ObservabilityLink href={trace.observabilityUrl} />
                 <FinishTraceAnnotation />
               </div>
             }
@@ -127,16 +120,5 @@ function TraceViewMode() {
         })
       }
     />
-  );
-}
-
-function LangfuseLink({ href }: { href: string | undefined }) {
-  if (!href) return null;
-  return (
-    <Button asChild variant="outline" size="sm">
-      <a href={href} target="_blank" rel="noreferrer">
-        Open in Langfuse <ExternalLink />
-      </a>
-    </Button>
   );
 }

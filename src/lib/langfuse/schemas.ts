@@ -4,6 +4,7 @@ export const langfuseConfig = z.object({
   baseUrl: z.url({ protocol: /^https?$/ }),
   publicKey: z.string().trim().min(1),
   secretKey: z.string().trim().min(1),
+  projectId: z.string().min(1).optional(),
 });
 
 const observationContent = z

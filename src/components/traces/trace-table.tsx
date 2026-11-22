@@ -8,6 +8,7 @@ import {
   QuestionView,
 } from "@/components/question-view";
 import type { TraceAnnotation } from "@/lib/traces/annotations";
+import { ObservabilityLink } from "./observability-link";
 import {
   FinishTraceAnnotation,
   TraceAnnotationEditor,
@@ -26,6 +27,7 @@ export function TraceTable({
   removeFinished: boolean;
   traces: {
     traceId: string;
+    observabilityUrl: string | undefined;
     startTime: string;
     model: string | null | undefined;
     failed: boolean;
@@ -81,6 +83,7 @@ export function TraceTable({
           {visible.map(
             ({
               traceId,
+              observabilityUrl,
               startTime,
               model,
               failed,
@@ -113,6 +116,9 @@ export function TraceTable({
                       <TraceTime value={startTime} />
                       {model && <p className="wrap-anywhere">{model}</p>}
                       {failed && <p className="text-destructive">Failed</p>}
+                    </div>
+                    <div className="mt-1 empty:hidden">
+                      <ObservabilityLink href={observabilityUrl} />
                     </div>
                     <div className="mt-2 empty:hidden">
                       <FinishTraceAnnotation />

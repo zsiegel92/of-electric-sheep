@@ -3,13 +3,18 @@ import { z } from "zod";
 import { langfuseConfig, observationPage } from "./schemas";
 
 export function getLangfuseConfig() {
-  const { LANGFUSE_BASE_URL, LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY } =
-    process.env;
+  const {
+    LANGFUSE_BASE_URL,
+    LANGFUSE_PUBLIC_KEY,
+    LANGFUSE_SECRET_KEY,
+    LANGFUSE_PROJECT_ID,
+  } = process.env;
   if (!LANGFUSE_PUBLIC_KEY?.trim() || !LANGFUSE_SECRET_KEY?.trim()) return;
   return langfuseConfig.parse({
     baseUrl: LANGFUSE_BASE_URL || "https://cloud.langfuse.com",
     publicKey: LANGFUSE_PUBLIC_KEY,
     secretKey: LANGFUSE_SECRET_KEY,
+    projectId: LANGFUSE_PROJECT_ID?.trim() || undefined,
   });
 }
 

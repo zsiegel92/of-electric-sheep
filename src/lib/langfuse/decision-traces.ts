@@ -29,11 +29,20 @@ function decisionPipelineId(span: Observation) {
   return z.uuid().safeParse(span.metadata?.["pipelineId"]).data;
 }
 
-function decisionTrace(span: Observation) {
+function decisionTrace(
+  span: Observation,
+  {
+    baseUrl,
+    projectId = span.projectId,
+  }: NonNullable<ReturnType<typeof getLangfuseConfig>>,
+) {
   const output = systemOneResponse.safeParse(span.output).data;
   return {
     id: span.id,
     traceId: span.traceId,
+    observabilityUrl: projectId
+      ? `${baseUrl.replace(/\/$/, "")}/project/${encodeURIComponent(projectId)}/traces/${span.traceId}?${new URLSearchParams({ traceId: span.traceId })}`
+      : undefined,
     startTime: span.startTime,
     model: output?.model ?? span.model,
     failed: span.level === "ERROR",
@@ -75,7 +84,7 @@ export async function getPipelineTracePage(
         traceId.safeParse(span.traceId).success &&
         !traces.has(span.traceId)
       ) {
-        traces.set(span.traceId, decisionTrace(span));
+        traces.set(span.traceId, decisionTrace(span, config));
       }
     }
     const annotations = await listTraceAnnotations(pipelineId, [
@@ -216,29 +225,12 @@ export async function findDecisionTrace(
           id: pipeline.id,
           name: pipeline.displayName ?? pipeline.model ?? pipeline.id,
         },
-        trace: decisionTrace(span),
+        trace: decisionTrace(span, config),
         questions,
         annotationQuestions,
-        langfuseUrl: langfuseTraceUrl(config.baseUrl, span),
       };
     }
     cursor = page.meta.cursor ?? undefined;
   } while (cursor);
   return undefined;
-}
-
-function langfuseTraceUrl(baseUrl: string, span: Observation) {
-  if (!span.projectId) return;
-  const time = Date.parse(span.startTime);
-  const hour = 60 * 60 * 1000;
-  const query = new URLSearchParams({
-    peek: span.id,
-    observation: span.id,
-    traceId: span.traceId,
-    timestamp: span.startTime,
-    search: span.traceId,
-    searchType: "id",
-    dateRange: `${time - hour}-${time + hour}`,
-  });
-  return `${baseUrl.replace(/\/$/, "")}/project/${encodeURIComponent(span.projectId)}/traces?${query}`;
 }
