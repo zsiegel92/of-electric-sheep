@@ -162,9 +162,6 @@ class SystemOneRoute(APIRoute):
 
 
 router = APIRouter(prefix="/api", tags=["System One · TypeSafe"])
-compressed_router = APIRouter(
-    prefix="/api", tags=["System One · TypeSafe"], route_class=SystemOneRoute
-)
 
 
 @cache
@@ -391,32 +388,6 @@ def models(user: ApiUser) -> ModelList:
     return upstream("GET", "/v1/models", ModelList)
 
 
-@compressed_router.post(
-    "/v1/systemone",
-    operation_id="decide",
-    description="Evaluate named questions against shared state. Supports multipart images and zstd encoding (up to 16 MiB decoded).",
-    openapi_extra={
-        "requestBody": {
-            "content": {
-                "multipart/form-data": {
-                    "schema": {
-                        "type": "object",
-                        "required": ["request"],
-                        "properties": {
-                            "request": {
-                                "type": "string",
-                                "description": "JSON System One request with image assets referencing uploaded part names.",
-                            },
-                        },
-                        "additionalProperties": {"type": "string", "format": "binary"},
-                    },
-                    "encoding": {"request": {"contentType": "application/json"}},
-                }
-            }
-        }
-    },
-    responses={401: {"description": "An active API key is required"}},
-)
 def decide(
     payload: SystemOneRequest,
     user: ApiUser,
@@ -453,6 +424,37 @@ def decide_by_pipeline(
         )
     result, _ = run_version(version, primary, payload.state)
     return result
+
+
+router.add_api_route(
+    "/v1/systemone",
+    decide,
+    methods=["POST"],
+    route_class_override=SystemOneRoute,
+    operation_id="decide",
+    description="Evaluate named questions against shared state. Supports multipart images and zstd encoding (up to 16 MiB decoded).",
+    openapi_extra={
+        "requestBody": {
+            "content": {
+                "multipart/form-data": {
+                    "schema": {
+                        "type": "object",
+                        "required": ["request"],
+                        "properties": {
+                            "request": {
+                                "type": "string",
+                                "description": "JSON System One request with image assets referencing uploaded part names.",
+                            },
+                        },
+                        "additionalProperties": {"type": "string", "format": "binary"},
+                    },
+                    "encoding": {"request": {"contentType": "application/json"}},
+                }
+            }
+        }
+    },
+    responses={401: {"description": "An active API key is required"}},
+)
 
 
 def run_stored(payload, user):
