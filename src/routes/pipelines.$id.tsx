@@ -8,6 +8,12 @@ import {
 import { Tabs } from "radix-ui";
 import { type ComponentProps, useState } from "react";
 import { z } from "zod";
+import { getTypeSafeApiBaseUrl } from "@/api/api-base-url";
+import {
+  getPipelineVersions,
+  makePipelinePrimary,
+  runStoredPipeline,
+} from "@/api/pipelines";
 import { CurlPreview } from "@/components/curl-preview";
 import { PageHeader } from "@/components/page-header";
 import { PipelineName } from "@/components/pipeline-name";
@@ -25,12 +31,6 @@ import { buildCurl } from "@/lib/system-one/curl";
 import { systemOneRoutes } from "@/lib/system-one/routes";
 import { exactPipelineHeader } from "@/lib/system-one/type-helpers";
 import { systemOneRequest } from "@/lib/system-one/typesafe-api-schemas";
-import { getTypeSafeApiBaseUrl } from "@/server/api-base-url";
-import {
-  getPipelineVersions,
-  makePipelinePrimary,
-  runStoredPipeline,
-} from "@/server/pipelines";
 
 const testTab = z.enum(["ui", "typesafe-curl", "pipeline-curl"]);
 

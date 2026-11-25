@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { getPipelineQuestions, updateQuestionAlias } from "@/api/pipelines";
 import type { PipelineQuestion } from "@/lib/decisions/pipeline-schemas";
-import { getPipelineQuestions, updateQuestionAlias } from "@/server/pipelines";
 import { EditableName } from "./editable-name";
 
 const questionQueryKey = (pipelineId: string) => [

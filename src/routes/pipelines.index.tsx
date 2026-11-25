@@ -2,12 +2,12 @@ import { useMutation } from "@tanstack/react-query";
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { z } from "zod";
+import { listPipelines, updatePipeline } from "@/api/pipelines";
 import { PipelineName } from "@/components/pipeline-name";
 import { PipelineQuestions } from "@/components/pipeline-questions";
 import { PipelineViewLinks } from "@/components/pipeline-view-links";
 import { usePipelineQuestions } from "@/components/question-name";
 import { Button } from "@/components/ui/button";
-import { listPipelines, updatePipeline } from "@/server/pipelines";
 
 export const Route = createFileRoute("/pipelines/")({
   validateSearch: z.object({

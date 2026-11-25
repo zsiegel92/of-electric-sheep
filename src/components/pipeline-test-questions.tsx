@@ -1,7 +1,7 @@
 import { skipToken, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import type { runStoredPipeline } from "@/server/pipelines";
-import { getStoredTraceAnnotations } from "@/server/traces";
+import type { runStoredPipeline } from "@/api/pipelines";
+import { getStoredTraceAnnotations } from "@/api/traces";
 import { PipelineQuestions } from "./pipeline-questions";
 import { TraceDetailLink } from "./pipeline-view-links";
 import type { NamedQuestion } from "./question-view";

@@ -16,6 +16,8 @@ jobs:
           runtime: node@24
           install: false
           cache: true
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
       - run: make install
-      - run: make build
       - run: make check

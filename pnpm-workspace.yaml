@@ -1,4 +1,2 @@
 allowBuilds:
   esbuild: true
-  protobufjs: false
-  inngest-cli: true

@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { apiKeySecret } from "../src/lib/api-keys/schemas";
 import {
   decide,
   type SystemOneInput,
 } from "../src/lib/system-one/rest-api-client";
-import { ensureTestUser } from "./ensure-test-user";
 
 const { APP_URL } = process.env;
 const appUrl = new URL(APP_URL ?? "http://localhost:5173");
@@ -14,7 +15,12 @@ if (
   throw new Error("The System One smoke test requires a local APP_URL");
 }
 
-const { secret } = await ensureTestUser();
+execFileSync(
+  "uv",
+  ["run", "--locked", "python", "-m", "scripts.ensure_smoke_user"],
+  { stdio: "inherit" },
+);
+const secret = apiKeySecret.parse(process.env["SYSTEM_ONE_TEST_API_KEY"]);
 const input = {
   model: "jev-latest",
   state: "The customer asked for a refund because the parcel arrived broken.",

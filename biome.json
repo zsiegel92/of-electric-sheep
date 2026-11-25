@@ -9,7 +9,6 @@
       "!**/.local",
       "!**/.venv",
       "!**/routeTree.gen.ts",
-      "!**/drizzle/meta",
       "!**/.output",
       "!**/.vercel",
       "!**/.tanstack",

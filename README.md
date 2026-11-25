@@ -1,86 +1,58 @@
 # Of Electric Sheep
 
-TanStack Start, Better Auth, oRPC, Drizzle/PostgreSQL, and Inngest.
+A Vite and TanStack Router frontend, a FastAPI backend, and PostgreSQL. Hey API generates the TypeScript client from FastAPI's OpenAPI schema.
 
-## Local setup
+## Local development
 
-Requires Node 24+, pnpm, and PostgreSQL command-line tools.
+Install Node 24+, pnpm, uv, PostgreSQL command-line tools, and [Atlas](https://atlasgo.io/getting-started). The Atlas Community CLI is sufficient.
 
 ```sh
 make install
-make db
-make db-migrate
+make env
 make dev
 ```
 
-This creates `.env`, starts local Postgres, and runs the app and Inngest.
+`make dev` starts the bundled Postgres instance when `DATABASE_URL` points to it, applies migrations, and runs Vite and Uvicorn with reload. Open [localhost:5173](http://localhost:5173). Vite proxies `/api` to FastAPI on port 8080. Ctrl-C stops Vite and Uvicorn. Use `make db-stop` to stop the bundled Postgres instance.
 
-- App: [localhost:5173](http://localhost:5173)
-- API docs: [localhost:5173/api/docs](http://localhost:5173/api/docs)
-- Inngest: [localhost:8288](http://localhost:8288)
+Set `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `ALLOWED_GITHUB_USER_IDS`, and `TYPESAFE_API_KEY` in `.env`. Register `http://localhost:5173/api/auth/callback/github` as a GitHub OAuth callback. Run `gh api user --jq .id` to get your account ID. The allowlist applies to sign-in, existing sessions, and API keys.
 
-Set the GitHub OAuth credentials, `ALLOWED_GITHUB_USER_IDS`, and `TYPESAFE_API_KEY` in `.env`. The local GitHub callback URL is `http://localhost:5173/api/auth/callback/github`. Restart after changing environment variables.
+Run `make generate` after changing an API contract, and commit the regenerated client in `src/generated`. Use `make build` followed by `make start` to serve the production SPA and API together on port 8080. Add the port 8080 callback to GitHub if you sign in through that origin.
 
-Run `gh api user --jq .id` while signed into GitHub and put the resulting account ID in `ALLOWED_GITHUB_USER_IDS`. Use commas to grant access to more accounts. An empty list blocks sign-in, existing sessions, and API keys. To open access later, remove `.refine(isAllowedGitHubUser)` from `authorizedGitHubId` in `src/lib/github-access.ts`.
+## Databases and migrations
 
-Ctrl-C stops the app and Inngest. `make db-stop` stops Postgres.
+```sh
+make db-generate NAME=describe_the_change
+make db-migrate
+```
 
-## Code
+Atlas compares the SQLModel table metadata and the SQL in `schema/` against the schema obtained by replaying `migrations/`. It writes a versioned SQL file only when it finds a change. Generation creates and drops disposable databases on the bundled local Postgres instance. For a remote target, set `ATLAS_DEV_DATABASE_URL` in your shell to a separate development Postgres connection with `CREATEDB` access.
 
-- `src/lib/decisions/decide.ts`: app decision logic and pipeline selection.
-- In `src/lib/decisions/`, `pipeline-definitions.ts` stores definitions, `pipeline-versions.ts` reads versions and updates display metadata, and `pipeline-groups.ts` handles evolution, question links, and promotion.
-- `src/lib/system-one/`: TypeSafe client, schemas, and request helpers.
-- `src/lib/api-keys/`: API-key queries and schemas.
-- `src/lib/auth.ts`: Better Auth setup and session lookup.
-- `src/start.ts`: TanStack request authentication and CSRF policy.
-- `src/lib/db/schema.ts`: database tables.
-- `src/routes/`: TanStack pages and HTTP entry points.
-- `src/server/`: TanStack server functions. `src/server/api/` contains the oRPC procedures, OpenAPI and Swagger setup, and TypeSafe request adaptation.
-- `src/lib/inngest/functions/`: background jobs, registered in `src/routes/api.inngest.ts`.
+Add trigger and function changes in handwritten SQL migrations and update their definitions in `schema/`. Atlas Community diffs tables, indexes, and constraints. Run `make db-hash` after adding or editing a pending migration. Applied migrations should stay immutable.
 
-To use the TypeSafe SDK, set its base URL to your app's `/api` URL and use an Of Electric Sheep API key. The SDK calls `POST /api/v1/systemone` for decisions and `GET /api/v1/models` for models. Both endpoints accept `Authorization: Bearer <api-key>` and appear in Swagger. Decisions reuse per-user pipelines, which can point to a custom TypeSafe endpoint. Pipeline rows are created on first use; Inngest receives creation and usage events.
+To copy an existing Drizzle database, set `OLD_DATABASE_URL` to the source and `DATABASE_URL` to the destination, then run `make db-copy-data`. The command applies Atlas migrations first. If the destination already has the Drizzle baseline, it verifies the full schema before recording the Atlas baseline. The copy reads a consistent source snapshot, verifies the copied rows in the same target transaction, and skips identical rows on reruns. A conflicting row aborts the copy.
 
-Inngest saves decision traces to Postgres after each run. The trace views query Postgres, including annotation filters and confidence sorting. Fetch recent traces with `pnpm run script scripts/tail-spans-from-pipeline.ts <pipeline-id>`.
+## Modal
 
-Optional Langfuse export uses `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and `LANGFUSE_BASE_URL`. Set `LANGFUSE_PROJECT_ID` to include observability links on new trace records. Postgres traces contain the decision input state, answers, and usage. Raw image attachments still go to Langfuse when export is configured. If a trace exceeds the Inngest event size limit, Postgres keeps the trace metadata and marks the omitted payload.
+Authenticate the Modal CLI in the environment you want to use. Create a Modal Secret named `of-electric-sheep`, or export `SHEEP_MODAL_SECRET_NAME` to select another secret. Configure a database URL reachable from Modal and apply Atlas migrations to that database before deploying. Supply the auth, GitHub, allowlist, and TypeSafe settings from `.env.example` in the secret.
+
+- `make deploy-python` deploys the FastAPI backend.
+- `make deploy` builds the frontend and deploys it alongside FastAPI at the same origin.
+- `make dev-modal-serve` starts `modal serve` and Vite together. Set `SHEEP_MODAL_SERVE_URL` in `.env` or your shell. To get the URL the first time, run `uv run --locked --extra modal modal serve modal_app.py` and copy the endpoint it prints.
+- `make dev-frontend-deployed-backend` starts Vite against the endpoint in `SHEEP_DEPLOYED_BACKEND_URL`. Set it in `.env` or your shell.
+
+For either Vite workflow, include `http://localhost:5173` in the backend's `AUTH_ORIGINS` and register its callback with GitHub. For a hosted full stack, include the HTTPS site origin and register its `/api/auth/callback/github` callback. The deployment targets publish the same Modal app. Use a separate Modal environment to keep a development app and secret independent of production.
+
+## API and traces
+
+Open `/api/docs` after sign-in. TypeSafe SDK clients can use the app's `/api` base URL with an Of Electric Sheep API key. The SDK calls `GET /api/v1/models` and `POST /api/v1/systemone`. System One supports JSON, multipart images, and zstd encoding. `POST /api/system-one/decide-by-pipeline` replays a saved pipeline.
+
+Pipeline definitions and traces are persisted directly in Postgres. The trace dashboard supports confidence sorting, annotations, and JSONL export. Run `uv run --locked python -m scripts.tail_traces <pipeline-id>` to read recent traces from the CLI. Configure the optional Langfuse settings in `.env.example` to export generations and show observability links.
 
 ## Checks
 
 ```sh
 make check
-pnpm test:integration
-pnpm test:systemone
+make test-integration
 ```
 
-`test:integration` exercises decision processing with local Postgres, a fake TypeSafe endpoint, and stubbed Inngest publishing. `test:systemone` calls the running app and live TypeSafe API. Add `system-one-smoke-test` to your local `ALLOWED_GITHUB_USER_IDS` for that test.
-
-After schema changes, use `make db-generate` and `make db-migrate`. `make db-studio` opens Drizzle Studio.
-
-The database baseline is in `drizzle/0000_initial.sql`. `drizzle/0001_pipeline-invariants.sql` adds the answer-shape function, deferred constraints, and triggers that enforce pipeline immutability and complete question links. If your local database used the earlier migration history, point `DATABASE_URL` at a fresh database before running `make db-migrate`.
-
-## Deploy to Vercel
-
-1. Create a fresh Neon database. Use the pooled connection string for the deployed app. Run the checked-in migrations once against Neon's direct connection string from this checkout. `pnpm db:migrate` also applies future migrations.
-
-   ```sh
-   DATABASE_URL='<Neon direct connection string>' pnpm db:migrate
-   ```
-
-2. Import the Git repo into Vercel and select Node.js 24. Keep the default TanStack Start build settings. Pick a stable production domain. In your GitHub OAuth app, add `https://<domain>/api/auth/callback/github` as an authorized callback URL, or register a separate OAuth app for production.
-
-3. Set the following Production environment variables in Vercel before deploying.
-
-   | Variable                                   | Value                                       |
-   | ------------------------------------------ | ------------------------------------------- |
-   | `ENABLE_EXPERIMENTAL_COREPACK`             | `1` to use the pinned pnpm version          |
-   | `DATABASE_URL`                             | Neon pooled connection string               |
-   | `APP_URL`                                  | `https://<domain>`                          |
-   | `AUTH_SECRET`                              | Generate with `openssl rand -hex 32`        |
-   | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | Production GitHub OAuth app credentials     |
-   | `ALLOWED_GITHUB_USER_IDS`                  | Your GitHub account ID                      |
-   | `TYPESAFE_API_KEY`                         | Your TypeSafe API key                       |
-   | `INNGEST_EVENT_KEY`, `INNGEST_SIGNING_KEY` | Keys for the production Inngest environment |
-
-4. Deploy and sync `https://<domain>/api/inngest` in Inngest. The Inngest Vercel integration can set the two Inngest keys and sync automatically. The sync endpoint must be reachable by Inngest, with Inngest's own request signing enabled. Sign in, run a test decision, and check that its trace appears.
-
-Vercel applies environment variable changes on the next deployment. Langfuse is optional. The corresponding variables are in `.env.example`.
+The integration suite creates a disposable Atlas-migrated database and uses a stub TypeSafe endpoint. To run the live TypeSafe smoke test against the local app, add `system-one-smoke-test` to `ALLOWED_GITHUB_USER_IDS`, set `SYSTEM_ONE_TEST_API_KEY`, restart the app, and run `pnpm test:systemone`.

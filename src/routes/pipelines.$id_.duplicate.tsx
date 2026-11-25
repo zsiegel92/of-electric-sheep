@@ -3,6 +3,11 @@ import { createFileRoute, notFound } from "@tanstack/react-router";
 import { useState } from "react";
 import Editor from "react-simple-code-editor";
 import { z } from "zod";
+import {
+  evolvePipeline,
+  getEditablePipelineBaseUrls,
+  getPipelineVersions,
+} from "@/api/pipelines";
 import { JsonText } from "@/components/json-text";
 import { PageHeader } from "@/components/page-header";
 import {
@@ -19,11 +24,6 @@ import {
   pipelineSnapshot,
 } from "@/lib/decisions/pipeline-draft";
 import { imagesHeader, longContextHeader } from "@/lib/system-one/type-helpers";
-import {
-  evolvePipeline,
-  getEditablePipelineBaseUrls,
-  getPipelineVersions,
-} from "@/server/pipelines";
 
 export const Route = createFileRoute("/pipelines/$id_/duplicate")({
   validateSearch: z.object({ json: z.boolean().optional().catch(undefined) }),
