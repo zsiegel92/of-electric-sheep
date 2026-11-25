@@ -36,16 +36,16 @@ def main():
         save_user(db, TEST_USER)
         updated = db.execute(
             """INSERT INTO api_keys (id, user_id, name, prefix, key_hash)
-            VALUES (%s, %s, %s, %s, %s)
+            VALUES (%(key_id)s, %(user_id)s, %(name)s, %(prefix)s, %(key_hash)s)
             ON CONFLICT (id) DO UPDATE SET prefix = EXCLUDED.prefix, key_hash = EXCLUDED.key_hash
             WHERE api_keys.user_id = EXCLUDED.user_id""",
-            (
-                TEST_KEY_ID,
-                TEST_USER.githubId,
-                "System One smoke test",
-                key[:12],
-                hash_key(key),
-            ),
+            {
+                "key_id": TEST_KEY_ID,
+                "user_id": TEST_USER.githubId,
+                "name": "System One smoke test",
+                "prefix": key[:12],
+                "key_hash": hash_key(key),
+            },
         )
         if not updated.rowcount:
             raise SystemExit("The smoke-test key ID belongs to another user.")

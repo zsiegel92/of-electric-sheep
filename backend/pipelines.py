@@ -163,17 +163,17 @@ def insert_pipeline(
     inserted = db.execute(
         """INSERT INTO decision_pipelines
             (id, user_id, definition_hash, primary_grouped_pipeline_id, display_name, base_url, ui_ignored)
-        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        VALUES (%(pipeline_id)s, %(user_id)s, %(definition_hash)s, %(pipeline_id)s,
+                %(display_name)s, %(base_url)s, %(ui_ignored)s)
         ON CONFLICT (user_id, definition_hash) DO NOTHING RETURNING id""",
-        (
-            pipeline_id,
-            user_id,
-            hash_pipeline(definition, base_url),
-            pipeline_id,
-            display_name,
-            base_url,
-            ignored,
-        ),
+        {
+            "pipeline_id": pipeline_id,
+            "user_id": user_id,
+            "definition_hash": hash_pipeline(definition, base_url),
+            "display_name": display_name,
+            "base_url": base_url,
+            "ui_ignored": ignored,
+        },
     ).fetchone()
     if inserted is None:
         return None
@@ -185,23 +185,30 @@ def insert_definition(db, pipeline_id, definition):
     with db.cursor() as cursor:
         cursor.executemany(
             """INSERT INTO decision_pipeline_questions (pipeline_id, name, type, system_prompt, criteria)
-            VALUES (%s, %s, %s, %s, %s)""",
+            VALUES (%(pipeline_id)s, %(name)s, %(type)s, %(system_prompt)s, %(criteria)s)""",
             [
-                (
-                    pipeline_id,
-                    name,
-                    question["type"],
-                    Jsonb(question["instructions"])
+                {
+                    "pipeline_id": pipeline_id,
+                    "name": name,
+                    "type": question["type"],
+                    "system_prompt": Jsonb(question["instructions"])
                     if "instructions" in question
                     else None,
-                    Jsonb(question["criteria"]) if "criteria" in question else None,
-                )
+                    "criteria": Jsonb(question["criteria"])
+                    if "criteria" in question
+                    else None,
+                }
                 for name, question in definition["questions"].items()
             ],
         )
     db.execute(
-        "INSERT INTO decision_pipeline_definitions (pipeline_id, model, options) VALUES (%s, %s, %s)",
-        (pipeline_id, definition["model"], Jsonb(definition["options"])),
+        """INSERT INTO decision_pipeline_definitions (pipeline_id, model, options)
+        VALUES (%(pipeline_id)s, %(model)s, %(options)s)""",
+        {
+            "pipeline_id": pipeline_id,
+            "model": definition["model"],
+            "options": Jsonb(definition["options"]),
+        },
     )
 
 
@@ -209,20 +216,23 @@ def ensure_pipeline(db, user_id, definition):
     pipeline_id = insert_pipeline(db, user_id, definition)
     if pipeline_id is not None:
         pipeline = db.execute(
-            "SELECT * FROM decision_pipelines WHERE id = %s", (pipeline_id,)
+            "SELECT * FROM decision_pipelines WHERE id = %(pipeline_id)s",
+            {"pipeline_id": pipeline_id},
         ).fetchone()
     else:
         pipeline = db.execute(
-            "SELECT * FROM decision_pipelines WHERE user_id = %s AND definition_hash = %s FOR NO KEY UPDATE",
-            (user_id, hash_pipeline(definition)),
+            """SELECT * FROM decision_pipelines
+            WHERE user_id = %(user_id)s AND definition_hash = %(definition_hash)s
+            FOR NO KEY UPDATE""",
+            {"user_id": user_id, "definition_hash": hash_pipeline(definition)},
         ).fetchone()
     if pipeline is None:
         raise RuntimeError("Could not create or retrieve decision pipeline.")
     if pipeline_id is not None:
         return pipeline
     exists = db.execute(
-        "SELECT 1 FROM decision_pipeline_definitions WHERE pipeline_id = %s",
-        (pipeline["id"],),
+        "SELECT 1 FROM decision_pipeline_definitions WHERE pipeline_id = %(pipeline_id)s",
+        {"pipeline_id": pipeline["id"]},
     ).fetchone()
     if not exists:
         insert_definition(db, pipeline["id"], definition)
@@ -230,7 +240,10 @@ def ensure_pipeline(db, user_id, definition):
 
 
 def lock_owner(db, user_id):
-    db.execute("SELECT 1 FROM users WHERE github_id = %s FOR NO KEY UPDATE", (user_id,))
+    db.execute(
+        "SELECT 1 FROM users WHERE github_id = %(user_id)s FOR NO KEY UPDATE",
+        {"user_id": user_id},
+    )
 
 
 def replace_links(db, user_id, version, primary, links):
@@ -249,15 +262,24 @@ def replace_links(db, user_id, version, primary, links):
             400, "Link every question to one compatible primary question."
         )
     db.execute(
-        "DELETE FROM decision_question_links WHERE pipeline_id = %s", (version.id,)
+        "DELETE FROM decision_question_links WHERE pipeline_id = %(pipeline_id)s",
+        {"pipeline_id": version.id},
     )
     with db.cursor() as cursor:
         cursor.executemany(
             """INSERT INTO decision_question_links
                 (user_id, pipeline_id, primary_pipeline_id, name, primary_name, answer_shape)
-                VALUES (%s, %s, %s, %s, %s, %s)""",
+                VALUES (%(user_id)s, %(pipeline_id)s, %(primary_pipeline_id)s,
+                        %(name)s, %(primary_name)s, %(answer_shape)s)""",
             [
-                (user_id, version.id, primary.id, name, primary_name, source[name])
+                {
+                    "user_id": user_id,
+                    "pipeline_id": version.id,
+                    "primary_pipeline_id": primary.id,
+                    "name": name,
+                    "primary_name": primary_name,
+                    "answer_shape": source[name],
+                }
                 for name, primary_name in links.items()
             ],
         )
@@ -274,16 +296,18 @@ def save_links(db, user_id, data):
     if version.primaryGroupedPipelineId != primary.id:
         member = db.execute(
             """SELECT 1 FROM decision_pipelines
-            WHERE user_id = %s AND primary_grouped_pipeline_id = %s AND id <> %s LIMIT 1""",
-            (user_id, version.id, version.id),
+            WHERE user_id = %(user_id)s AND primary_grouped_pipeline_id = %(pipeline_id)s
+              AND id <> %(pipeline_id)s LIMIT 1""",
+            {"user_id": user_id, "pipeline_id": version.id},
         ).fetchone()
         if version.primaryGroupedPipelineId != version.id or member:
             raise HTTPException(
                 400, "Only a standalone pipeline can join another group."
             )
         db.execute(
-            "UPDATE decision_pipelines SET primary_grouped_pipeline_id = %s WHERE id = %s",
-            (primary.id, version.id),
+            """UPDATE decision_pipelines SET primary_grouped_pipeline_id = %(primary_id)s
+            WHERE id = %(pipeline_id)s""",
+            {"primary_id": primary.id, "pipeline_id": version.id},
         )
     links = {link.name: link.primaryName for link in data.links}
     if len(links) != len(data.links):
@@ -342,8 +366,9 @@ def evolve(db, user_id, source_id, draft):
                 links[question.name] = primary_name
         if len(links) == len(version.questions):
             db.execute(
-                "UPDATE decision_pipelines SET primary_grouped_pipeline_id = %s WHERE id = %s",
-                (primary.id, version.id),
+                """UPDATE decision_pipelines SET primary_grouped_pipeline_id = %(primary_id)s
+                WHERE id = %(pipeline_id)s""",
+                {"primary_id": primary.id, "pipeline_id": version.id},
             )
             replace_links(db, user_id, version, primary, links)
     return pipeline_id
@@ -361,20 +386,22 @@ def promote(db, user_id, pipeline_id):
         target: source
         for source, target in match_questions(version, old_primary).items()
     }
-    group = (user_id, old_primary.id)
+    group = {"user_id": user_id, "old_primary_id": old_primary.id}
     member_ids = db.execute(
-        "SELECT id FROM decision_pipelines WHERE user_id = %s AND primary_grouped_pipeline_id = %s",
+        """SELECT id FROM decision_pipelines
+        WHERE user_id = %(user_id)s AND primary_grouped_pipeline_id = %(old_primary_id)s""",
         group,
     ).fetchall()
     ids = [item["id"] for item in member_ids]
     members = read_versions(db, user_id, ids)
     db.execute(
-        "DELETE FROM decision_question_links WHERE pipeline_id = ANY(%s)", (ids,)
+        "DELETE FROM decision_question_links WHERE pipeline_id = ANY(%(pipeline_ids)s)",
+        {"pipeline_ids": ids},
     )
     db.execute(
-        """UPDATE decision_pipelines SET primary_grouped_pipeline_id = %s
-        WHERE user_id = %s AND primary_grouped_pipeline_id = %s""",
-        (pipeline_id, *group),
+        """UPDATE decision_pipelines SET primary_grouped_pipeline_id = %(new_primary_id)s
+        WHERE user_id = %(user_id)s AND primary_grouped_pipeline_id = %(old_primary_id)s""",
+        {**group, "new_primary_id": pipeline_id},
     )
     for member in members:
         if member.id != pipeline_id:

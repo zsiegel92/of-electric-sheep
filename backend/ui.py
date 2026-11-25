@@ -106,9 +106,9 @@ def update_pipeline(
         )
         updated = db.execute(
             sql.SQL(
-                "UPDATE decision_pipelines SET {} = %s WHERE id = %s AND user_id = %s"
+                "UPDATE decision_pipelines SET {} = %(value)s WHERE id = %(pipeline_id)s AND user_id = %(user_id)s"
             ).format(sql.Identifier(column)),
-            (value, data.pipelineId, user.githubId),
+            {"value": value, "pipeline_id": data.pipelineId, "user_id": user.githubId},
         )
         if not updated.rowcount:
             raise HTTPException(404, "Pipeline not found.")
@@ -118,24 +118,26 @@ def update_pipeline(
 def update_alias(user: SessionUser, data: UpdateQuestionAlias) -> str | None:
 
     with pool().connection() as db:
-        key = (data.pipelineId, data.questionName)
+        key = {"pipeline_id": data.pipelineId, "question_name": data.questionName}
         question = db.execute(
             """SELECT 1 FROM decision_pipeline_questions q JOIN decision_pipelines p ON p.id = q.pipeline_id
-            WHERE q.pipeline_id = %s AND q.name = %s AND p.user_id = %s FOR KEY SHARE""",
-            (*key, user.githubId),
+            WHERE q.pipeline_id = %(pipeline_id)s AND q.name = %(question_name)s AND p.user_id = %(user_id)s
+            FOR KEY SHARE""",
+            {**key, "user_id": user.githubId},
         ).fetchone()
         if not question:
             raise HTTPException(404, "Question not found.")
         if data.alias is None:
             db.execute(
-                "DELETE FROM pipeline_question_aliases WHERE pipeline_id = %s AND question_name = %s",
+                "DELETE FROM pipeline_question_aliases WHERE pipeline_id = %(pipeline_id)s AND question_name = %(question_name)s",
                 key,
             )
         else:
             db.execute(
                 """INSERT INTO pipeline_question_aliases (pipeline_id, question_name, alias)
-                VALUES (%s, %s, %s) ON CONFLICT (pipeline_id, question_name) DO UPDATE SET alias = EXCLUDED.alias""",
-                (*key, data.alias),
+                VALUES (%(pipeline_id)s, %(question_name)s, %(alias)s)
+                ON CONFLICT (pipeline_id, question_name) DO UPDATE SET alias = EXCLUDED.alias""",
+                {**key, "alias": data.alias},
             )
     return data.alias
 

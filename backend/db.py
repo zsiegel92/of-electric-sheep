@@ -19,7 +19,8 @@ def pool():
 
 def save_user(db, user):
     db.execute(
-        """INSERT INTO users (github_id, name, email) VALUES (%s, %s, %s)
+        """INSERT INTO users (github_id, name, email)
+        VALUES (%(github_id)s, %(name)s, %(email)s)
         ON CONFLICT (github_id) DO UPDATE SET name = EXCLUDED.name, email = EXCLUDED.email""",
-        (user.githubId, user.name, user.email),
+        {"github_id": user.githubId, "name": user.name, "email": user.email},
     )

@@ -28,9 +28,9 @@ def copy_table(source, target, name, keys):
         )
     )
     columns = target.execute(
-        """SELECT attname, attgenerated FROM pg_attribute WHERE attrelid = %s::regclass
+        """SELECT attname, attgenerated FROM pg_attribute WHERE attrelid = %(table_name)s::regclass
            AND attnum > 0 AND NOT attisdropped ORDER BY attnum""",
-        (f"public.{name}",),
+        {"table_name": f"public.{name}"},
     ).fetchall()
     all_columns = sql.SQL(", ").join(sql.Identifier(column) for column, _ in columns)
     # COPY preserves timestamp precision and distinguishes SQL NULL from JSON null.

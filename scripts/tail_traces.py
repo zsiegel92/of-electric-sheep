@@ -15,7 +15,8 @@ def main():
 
     with pool() as connections, connections.connection() as db:
         owner = db.execute(
-            "SELECT user_id FROM decision_pipelines WHERE id = %s", (args.pipeline_id,)
+            "SELECT user_id FROM decision_pipelines WHERE id = %(pipeline_id)s",
+            {"pipeline_id": args.pipeline_id},
         ).fetchone()
         traces = (
             trace_page(

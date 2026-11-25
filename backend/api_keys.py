@@ -43,8 +43,8 @@ def get_api_user(
         with pool().connection() as db:
             row = db.execute(
                 """SELECT u.github_id AS "githubId", u.name, u.email FROM api_keys k
-                   JOIN users u ON u.github_id = k.user_id WHERE k.key_hash = %s""",
-                (hash_key(key),),
+                   JOIN users u ON u.github_id = k.user_id WHERE k.key_hash = %(key_hash)s""",
+                {"key_hash": hash_key(key)},
             ).fetchone()
         if row and settings().allows_github(row["githubId"]):
             try:
@@ -61,8 +61,8 @@ ApiUser = Annotated[User, Depends(get_api_user)]
 def list_keys(user: SessionUser) -> list[ApiKey]:
     with pool().connection() as db:
         return db.execute(
-            f"SELECT {COLUMNS} FROM api_keys WHERE user_id = %s ORDER BY created_at DESC",
-            (user.githubId,),
+            f"SELECT {COLUMNS} FROM api_keys WHERE user_id = %(user_id)s ORDER BY created_at DESC",
+            {"user_id": user.githubId},
         ).fetchall()
 
 
@@ -72,9 +72,15 @@ def create_key(user: SessionUser, data: ApiKeyName) -> CreatedApiKey:
     with pool().connection() as db:
         save_user(db, user)
         row = db.execute(
-            f"""INSERT INTO api_keys (user_id, name, prefix, key_hash) VALUES (%s, %s, %s, %s)
+            f"""INSERT INTO api_keys (user_id, name, prefix, key_hash)
+            VALUES (%(user_id)s, %(name)s, %(prefix)s, %(key_hash)s)
             RETURNING {COLUMNS}""",
-            (user.githubId, data.name, secret[:12], hash_key(secret)),
+            {
+                "user_id": user.githubId,
+                "name": data.name,
+                "prefix": secret[:12],
+                "key_hash": hash_key(secret),
+            },
         ).fetchone()
     if row is None:
         raise RuntimeError("The API key was not created.")
@@ -85,8 +91,8 @@ def create_key(user: SessionUser, data: ApiKeyName) -> CreatedApiKey:
 def get_key(user: SessionUser, key_id: UUID) -> ApiKey:
     with pool().connection() as db:
         row = db.execute(
-            f"SELECT {COLUMNS} FROM api_keys WHERE user_id = %s AND id = %s",
-            (user.githubId, key_id),
+            f"SELECT {COLUMNS} FROM api_keys WHERE user_id = %(user_id)s AND id = %(key_id)s",
+            {"user_id": user.githubId, "key_id": key_id},
         ).fetchone()
     if not row:
         raise HTTPException(404, "API key not found.")
@@ -97,8 +103,8 @@ def get_key(user: SessionUser, key_id: UUID) -> ApiKey:
 def revoke_key(user: SessionUser, key_id: UUID) -> DeletedApiKey:
     with pool().connection() as db:
         deleted = db.execute(
-            "DELETE FROM api_keys WHERE user_id = %s AND id = %s",
-            (user.githubId, key_id),
+            "DELETE FROM api_keys WHERE user_id = %(user_id)s AND id = %(key_id)s",
+            {"user_id": user.githubId, "key_id": key_id},
         )
         if not deleted.rowcount:
             raise HTTPException(404, "API key not found.")

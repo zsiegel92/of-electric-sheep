@@ -68,21 +68,24 @@ def store_trace(db, pipeline_id, trace_id, started, payload, *, result=None, url
         """INSERT INTO decision_traces
           (pipeline_id, trace_id, started_at, ended_at, model, failed, state, answers, usage,
            min_confidence, average_confidence, observability_url)
-        VALUES (%s, %s, %s, now(), %s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (%(pipeline_id)s, %(trace_id)s, %(started_at)s, now(), %(model)s, %(failed)s,
+                %(state)s, %(answers)s, %(usage)s, %(min_confidence)s, %(average_confidence)s, %(observability_url)s)
         ON CONFLICT (pipeline_id, trace_id) DO NOTHING""",
-        (
-            pipeline_id,
-            trace_id,
-            started,
-            result.model if result else payload.model,
-            result is None,
-            Jsonb(payload.state),
-            Jsonb(answers) if result else None,
-            Jsonb(result.usage) if result else None,
-            min(confidence) if confidence else None,
-            sum(confidence) / len(confidence) if confidence else None,
-            url,
-        ),
+        {
+            "pipeline_id": pipeline_id,
+            "trace_id": trace_id,
+            "started_at": started,
+            "model": result.model if result else payload.model,
+            "failed": result is None,
+            "state": Jsonb(payload.state),
+            "answers": Jsonb(answers) if result else None,
+            "usage": Jsonb(result.usage) if result else None,
+            "min_confidence": min(confidence) if confidence else None,
+            "average_confidence": sum(confidence) / len(confidence)
+            if confidence
+            else None,
+            "observability_url": url,
+        },
     )
 
 
@@ -132,8 +135,8 @@ def trace_page(db, user_id, pipeline_id, cursor, until, status, order):
     if cursor:
         anchor = db.execute(
             """SELECT started_at, trace_id, min_confidence, average_confidence FROM decision_traces
-            WHERE pipeline_id = %s AND trace_id = %s""",
-            (pipeline_id, cursor),
+            WHERE pipeline_id = %(pipeline_id)s AND trace_id = %(trace_id)s""",
+            {"pipeline_id": pipeline_id, "trace_id": cursor},
         ).fetchone()
         if anchor:
             params.update(anchor)
@@ -172,9 +175,9 @@ def trace_detail(db, user_id, trace_id):
     row = db.execute(
         f"""SELECT {TRACE_FIELDS} FROM decision_traces t
         JOIN decision_pipelines p ON p.id = t.pipeline_id
-        WHERE p.user_id = %s AND t.trace_id = %s
+        WHERE p.user_id = %(user_id)s AND t.trace_id = %(trace_id)s
         ORDER BY t.started_at DESC, t.trace_id DESC, t.pipeline_id LIMIT 1""",
-        (user_id, trace_id),
+        {"user_id": user_id, "trace_id": trace_id},
     ).fetchone()
     if not row:
         raise HTTPException(404, "Trace not found.")
@@ -192,8 +195,8 @@ def owned_annotations(db, user_id, key):
     row = db.execute(
         f"""SELECT {ANNOTATIONS} AS annotations FROM decision_traces t
         JOIN decision_pipelines p ON p.id = t.pipeline_id
-        WHERE p.user_id = %s AND t.pipeline_id = %s AND t.trace_id = %s""",
-        (user_id, key.pipelineId, key.traceId),
+        WHERE p.user_id = %(user_id)s AND t.pipeline_id = %(pipeline_id)s AND t.trace_id = %(trace_id)s""",
+        {"user_id": user_id, "pipeline_id": key.pipelineId, "trace_id": key.traceId},
     ).fetchone()
     return row["annotations"] if row else None
 
@@ -213,10 +216,15 @@ def choice_keys(question):
 def save_annotation(db, user_id, data):
     if owned_annotations(db, user_id, data) is None:
         raise HTTPException(404, "Trace not found.")
-    key = (data.pipelineId, data.traceId, data.questionName)
+    key = {
+        "pipeline_id": data.pipelineId,
+        "trace_id": data.traceId,
+        "question_name": data.questionName,
+    }
     if data.choiceKey is None:
         db.execute(
-            """DELETE FROM decision_trace_annotations WHERE (pipeline_id, trace_id, question_name) = (%s, %s, %s)""",
+            """DELETE FROM decision_trace_annotations
+            WHERE (pipeline_id, trace_id, question_name) = (%(pipeline_id)s, %(trace_id)s, %(question_name)s)""",
             key,
         )
         return
@@ -229,9 +237,10 @@ def save_annotation(db, user_id, data):
         raise HTTPException(400, "Choose an option from this trace's question.")
     db.execute(
         """INSERT INTO decision_trace_annotations (pipeline_id, trace_id, question_name, choice_key)
-        VALUES (%s, %s, %s, %s) ON CONFLICT (pipeline_id, trace_id, question_name)
+        VALUES (%(pipeline_id)s, %(trace_id)s, %(question_name)s, %(choice_key)s)
+        ON CONFLICT (pipeline_id, trace_id, question_name)
         DO UPDATE SET choice_key = EXCLUDED.choice_key, updated_at = now()""",
-        (*key, data.choiceKey),
+        {**key, "choice_key": data.choiceKey},
     )
 
 
@@ -240,11 +249,11 @@ def stream_export(user_id, pipeline_id, status, order):
     query = sql.SQL(
         f"""SELECT to_jsonb(export)::text AS line FROM (
             SELECT {TRACE_FIELDS} FROM decision_traces t JOIN decision_pipelines p ON p.id = t.pipeline_id
-            WHERE p.id = %s AND p.user_id = %s {{}} ORDER BY {{}}
+            WHERE p.id = %(pipeline_id)s AND p.user_id = %(user_id)s {{}} ORDER BY {{}}
         ) export"""
     ).format(condition, sorting)
     with pool().connection() as db, db.cursor("trace_export") as cursor:
         cursor.itersize = 16
-        cursor.execute(query, (pipeline_id, user_id))
+        cursor.execute(query, {"pipeline_id": pipeline_id, "user_id": user_id})
         for row in cursor:
             yield row["line"] + "\n"
