@@ -2,16 +2,12 @@ import { createFileRoute, notFound } from "@tanstack/react-router";
 import { z } from "zod";
 import { ExpandableDataValue } from "@/components/expandable-data-value";
 import { PageHeader } from "@/components/page-header";
-import { PipelineQuestions } from "@/components/pipeline-questions";
 import { PipelineViewLinks } from "@/components/pipeline-view-links";
 import { ObservabilityLink } from "@/components/traces/observability-link";
-import {
-  TraceAnnotationEditor,
-  TraceAnswer,
-} from "@/components/traces/trace-annotation";
-import { TraceQuestionAnnotations } from "@/components/traces/trace-question-annotations";
+import { TraceAnnotationEditor } from "@/components/traces/trace-annotation";
+import { TraceQuestions } from "@/components/traces/trace-questions";
 import { TraceTime } from "@/components/traces/trace-table";
-import { ViewModeSwitch } from "@/components/view-mode-switch";
+import { TraceViewMode } from "@/components/traces/trace-view-mode";
 import { traceId } from "@/lib/traces/schemas";
 import { getDecisionTrace } from "@/server/traces";
 
@@ -47,7 +43,7 @@ function TraceDetail() {
             }
             controls={
               <div className="flex flex-wrap items-center gap-2">
-                <TraceViewMode />
+                <TraceViewMode from={Route.fullPath} />
                 <ObservabilityLink href={trace.observabilityUrl} />
               </div>
             }
@@ -86,38 +82,12 @@ function TraceDetail() {
             No decision output available.
           </p>
         )}
-        <PipelineQuestions
+        <TraceQuestions
           questions={questions}
           answers={trace.answers}
           showJson={json}
-          renderAnswer={(question, answer) => (
-            <TraceAnswer {...question} answer={answer} />
-          )}
-          jsonFooter={
-            <TraceQuestionAnnotations
-              questions={questions}
-              answers={trace.answers}
-            />
-          }
         />
       </div>
     </TraceAnnotationEditor>
-  );
-}
-
-function TraceViewMode() {
-  const { json = false } = Route.useSearch();
-  const navigate = Route.useNavigate();
-  return (
-    <ViewModeSwitch
-      showJson={json}
-      onChange={(json) =>
-        void navigate({
-          replace: true,
-          resetScroll: false,
-          search: (previous) => ({ ...previous, json: json || undefined }),
-        })
-      }
-    />
   );
 }

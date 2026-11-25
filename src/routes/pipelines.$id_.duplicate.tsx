@@ -7,7 +7,6 @@ import { JsonText } from "@/components/json-text";
 import { PageHeader } from "@/components/page-header";
 import {
   PipelineComparison,
-  pipelineSnapshot,
   type QuestionPair,
 } from "@/components/pipeline-diff";
 import { PipelineEditorLink } from "@/components/pipeline-view-links";
@@ -17,6 +16,7 @@ import {
   type PipelineDraft,
   pipelineDraftSchema,
   pipelineExecutionKey,
+  pipelineSnapshot,
 } from "@/lib/decisions/pipeline-draft";
 import { imagesHeader, longContextHeader } from "@/lib/system-one/type-helpers";
 import {

@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { PipelineQuestion } from "@/lib/decisions/question-links";
+import type { PipelineQuestion } from "@/lib/decisions/pipeline-schemas";
 import { getPipelineQuestions, updateQuestionAlias } from "@/server/pipelines";
 import { EditableName } from "./editable-name";
 

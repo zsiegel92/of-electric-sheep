@@ -6,14 +6,10 @@ import {
 } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
+import { getTypeSafeApiBaseUrl } from "@/server/api-base-url";
 import { CopyButton } from "../components/copy-button";
 import { Button } from "../components/ui/button";
-import {
-  createApiKey,
-  getTypeSafeApiBaseUrl,
-  listApiKeys,
-  revokeApiKey,
-} from "../server/functions";
+import { createApiKey, listApiKeys, revokeApiKey } from "../server/api-keys";
 
 const keysQuery = queryOptions({
   queryKey: ["api-keys"],

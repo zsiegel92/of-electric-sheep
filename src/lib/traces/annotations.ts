@@ -1,4 +1,4 @@
-import type { PipelineQuestion } from "@/lib/decisions/question-links";
+import type { PipelineQuestion } from "@/lib/decisions/pipeline-schemas";
 
 export type TraceAnnotation = { questionName: string; choiceKey: string };
 

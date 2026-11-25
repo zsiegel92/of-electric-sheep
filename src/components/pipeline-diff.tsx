@@ -1,7 +1,9 @@
 import { diffWordsWithSpace } from "diff";
 import { Fragment, type ReactNode } from "react";
-import type { PipelineDraft } from "@/lib/decisions/pipeline-draft";
-import type { PipelineVersion } from "@/lib/decisions/question-links";
+import type {
+  PipelineDraft,
+  PipelineSnapshot,
+} from "@/lib/decisions/pipeline-draft";
 import {
   AlignedJsonColumns,
   type JsonRow,
@@ -10,8 +12,6 @@ import {
 import { JsonText } from "./json-text";
 import { QuestionName } from "./question-name";
 
-type Snapshot = Omit<PipelineDraft, "model" | "options"> &
-  Pick<PipelineVersion, "model" | "options">;
 export type QuestionPair = {
   key: string;
   leftName?: string | undefined;
@@ -20,19 +20,6 @@ export type QuestionPair = {
   rightAlias?: string | null | undefined;
 };
 
-export function pipelineSnapshot(version: PipelineVersion): Snapshot {
-  return {
-    displayName: version.displayName,
-    model: version.model,
-    baseUrl: version.baseUrl,
-    options: version.options,
-    uiIgnored: version.uiIgnored,
-    questions: Object.fromEntries(
-      version.questions.map(({ name, question }) => [name, question]),
-    ),
-  };
-}
-
 const fields = [
   ["displayName", "Name"],
   ["model", "Model"],
@@ -40,7 +27,7 @@ const fields = [
   ["options", "Capabilities"],
   ["uiIgnored", "Ignored"],
 ] as const satisfies readonly (readonly [
-  Exclude<keyof Snapshot, "questions">,
+  Exclude<keyof PipelineSnapshot, "questions">,
   string,
 ])[];
 
@@ -130,7 +117,7 @@ function FieldDiff({
 }
 
 function jsonRows(
-  snapshot: Snapshot,
+  snapshot: PipelineSnapshot,
   pairs: QuestionPair[],
   side: "leftName" | "rightName",
 ) {
@@ -164,8 +151,8 @@ export function PipelineComparison({
   showJson,
   rightLabel = "Compared version",
 }: {
-  left: Snapshot;
-  right: Snapshot;
+  left: PipelineSnapshot;
+  right: PipelineSnapshot;
   pairs: QuestionPair[];
   showJson: boolean;
   rightLabel?: string;

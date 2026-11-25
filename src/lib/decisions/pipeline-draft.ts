@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { pipelineDefinitionSchema } from "./pipeline-schemas";
+import {
+  type PipelineVersion,
+  pipelineDefinitionSchema,
+  pipelineQuestionRecord,
+} from "./pipeline-schemas";
 
 export const pipelineDraftSchema = pipelineDefinitionSchema
   .extend({
@@ -10,6 +14,20 @@ export const pipelineDraftSchema = pipelineDefinitionSchema
   .strict();
 
 export type PipelineDraft = z.output<typeof pipelineDraftSchema>;
+
+export type PipelineSnapshot = Omit<PipelineDraft, "model" | "options"> &
+  Pick<PipelineVersion, "model" | "options">;
+
+export function pipelineSnapshot(version: PipelineVersion): PipelineSnapshot {
+  return {
+    displayName: version.displayName,
+    model: version.model,
+    baseUrl: version.baseUrl,
+    options: version.options,
+    uiIgnored: version.uiIgnored,
+    questions: pipelineQuestionRecord(version.questions),
+  };
+}
 
 export function canonicalize(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalize);

@@ -28,14 +28,17 @@ Ctrl-C stops the app and Inngest. `make db-stop` stops Postgres.
 ## Code
 
 - `src/lib/decisions/decide.ts`: app decision logic and pipeline selection.
+- In `src/lib/decisions/`, `pipeline-definitions.ts` stores definitions, `pipeline-versions.ts` reads versions and updates display metadata, and `pipeline-groups.ts` handles evolution, question links, and promotion.
 - `src/lib/system-one/`: TypeSafe client, schemas, and request helpers.
 - `src/lib/api-keys/`: API-key queries and schemas.
-- `src/lib/auth.ts`: authentication.
+- `src/lib/auth.ts`: Better Auth setup and session lookup.
+- `src/start.ts`: TanStack request authentication and CSRF policy.
 - `src/lib/db/schema.ts`: database tables.
-- `src/server/`: routes and server functions.
+- `src/routes/`: TanStack pages and HTTP entry points.
+- `src/server/`: TanStack server functions. `src/server/api/` contains the oRPC procedures, OpenAPI and Swagger setup, and TypeSafe request adaptation.
 - `src/lib/inngest/functions/`: background jobs, registered in `src/routes/api.inngest.ts`.
 
-Create an API key in the app and send it as `X-API-Key` to call System One. Decisions reuse per-user pipelines, which can point to a custom TypeSafe endpoint. Pipeline rows are created on first use; Inngest receives creation and usage events.
+To use the TypeSafe SDK, set its base URL to your app's `/api` URL and use an Of Electric Sheep API key. The SDK calls `POST /api/v1/systemone` for decisions and `GET /api/v1/models` for models. Both endpoints accept `Authorization: Bearer <api-key>` and appear in Swagger. Decisions reuse per-user pipelines, which can point to a custom TypeSafe endpoint. Pipeline rows are created on first use; Inngest receives creation and usage events.
 
 Inngest saves decision traces to Postgres after each run. The trace views query Postgres, including annotation filters and confidence sorting. Fetch recent traces with `pnpm run script scripts/tail-spans-from-pipeline.ts <pipeline-id>`.
 

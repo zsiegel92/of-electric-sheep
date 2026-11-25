@@ -1,9 +1,4 @@
-import {
-  skipToken,
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import {
   createFileRoute,
   Link,
@@ -16,38 +11,26 @@ import { z } from "zod";
 import { CurlPreview } from "@/components/curl-preview";
 import { PageHeader } from "@/components/page-header";
 import { PipelineName } from "@/components/pipeline-name";
-import { PipelineQuestions } from "@/components/pipeline-questions";
-import {
-  PipelineTracesLink,
-  TraceDetailLink,
-} from "@/components/pipeline-view-links";
+import { PipelineTestQuestions } from "@/components/pipeline-test-questions";
+import { PipelineTracesLink } from "@/components/pipeline-view-links";
 import { usePipelineQuestions } from "@/components/question-name";
-import type { NamedQuestion } from "@/components/question-view";
-import {
-  FinishTraceAnnotation,
-  TraceAnnotationEditor,
-  TraceAnswer,
-} from "@/components/traces/trace-annotation";
-import { TraceQuestionAnnotations } from "@/components/traces/trace-question-annotations";
 import { Button } from "@/components/ui/button";
-import { ViewModeSwitch } from "@/components/view-mode-switch";
 import { apiKeyHeader } from "@/lib/api-keys/schemas";
 import {
   type PipelineVersion,
-  pipelineQuestionKinds,
-} from "@/lib/decisions/question-links";
+  pipelineQuestionRecord,
+} from "@/lib/decisions/pipeline-schemas";
+import { pipelineQuestionKinds } from "@/lib/decisions/question-links";
 import { buildCurl } from "@/lib/system-one/curl";
+import { systemOneRoutes } from "@/lib/system-one/routes";
 import { exactPipelineHeader } from "@/lib/system-one/type-helpers";
 import { systemOneRequest } from "@/lib/system-one/typesafe-api-schemas";
-import { typeSafeDecisionPath } from "@/lib/typesafe-api/paths";
-import { getTypeSafeApiBaseUrl } from "@/server/functions";
+import { getTypeSafeApiBaseUrl } from "@/server/api-base-url";
 import {
   getPipelineVersions,
   makePipelinePrimary,
   runStoredPipeline,
 } from "@/server/pipelines";
-import { systemOneRoutes } from "@/server/system-one/routes";
-import { getStoredTraceAnnotations } from "@/server/traces";
 
 const testTab = z.enum(["ui", "typesafe-curl", "pipeline-curl"]);
 
@@ -316,7 +299,7 @@ function PipelineRunner({
                 setUseCurrentBaseUrl={setUseTypeSafeBaseUrl}
                 label="Copy TypeSafe curl"
                 command={buildCurl(
-                  `${useTypeSafeBaseUrl ? baseUrl : "<base-url>"}${typeSafeDecisionPath}`,
+                  `${useTypeSafeBaseUrl ? baseUrl : "<base-url>"}${systemOneRoutes.decide.path}`,
                   {
                     Authorization: "Bearer <api-key>",
                     ...pipeline.options?.headers,
@@ -325,12 +308,7 @@ function PipelineRunner({
                   {
                     model: pipeline.model,
                     ...stateField,
-                    questions: Object.fromEntries(
-                      pipeline.questions.map(({ name, question }) => [
-                        name,
-                        question,
-                      ]),
-                    ),
+                    questions: pipelineQuestionRecord(pipeline.questions),
                   },
                   stateFromFile,
                 )}
@@ -384,111 +362,6 @@ function PipelineRunner({
         )}
       </section>
     </div>
-  );
-}
-
-function PipelineTestQuestions({
-  pipelineId,
-  questions,
-  result,
-}: {
-  pipelineId: string;
-  questions: NamedQuestion[];
-  result: Awaited<ReturnType<typeof runStoredPipeline>> | undefined;
-}) {
-  const [showJson, setShowJson] = useState(false);
-  const viewMode = (
-    <ViewModeSwitch showJson={showJson} onChange={setShowJson} />
-  );
-  const traceId = result?.traceId;
-  const annotation = result?.traceAnnotation;
-  const queryClient = useQueryClient();
-  const queryKey = [
-    "stored-trace-annotations",
-    annotation?.pipelineId,
-    traceId,
-  ];
-  const storedAnnotations = useQuery({
-    queryKey,
-    queryFn:
-      traceId && annotation
-        ? () =>
-            getStoredTraceAnnotations({
-              data: { pipelineId: annotation.pipelineId, traceId },
-            })
-        : skipToken,
-    refetchInterval: ({ state }) =>
-      state.data === null && state.dataUpdateCount < 15 ? 1000 : false,
-    retry: false,
-    staleTime: Infinity,
-  });
-  const annotations = storedAnnotations.data;
-  const stillPending =
-    storedAnnotations.isError ||
-    (!storedAnnotations.isFetching &&
-      (queryClient.getQueryState(queryKey)?.dataUpdateCount ?? 0) >= 15);
-  if (!traceId || !annotation || !annotations) {
-    return (
-      <div className="space-y-3">
-        <div className="flex flex-wrap items-center gap-2">
-          {viewMode}
-          {traceId && (
-            <p role="status" className="text-xs text-muted-foreground">
-              {stillPending ? "Trace is still pending." : "Saving trace…"}
-            </p>
-          )}
-          {traceId && stillPending && (
-            <Button
-              type="button"
-              size="xs"
-              variant="outline"
-              disabled={storedAnnotations.isFetching}
-              onClick={() => void storedAnnotations.refetch()}
-            >
-              Check again
-            </Button>
-          )}
-        </div>
-        <PipelineQuestions
-          pipelineId={pipelineId}
-          questions={questions}
-          answers={result?.answers}
-          showJson={showJson}
-        />
-      </div>
-    );
-  }
-  return (
-    <TraceAnnotationEditor
-      key={traceId}
-      traceId={traceId}
-      pipelineId={annotation.pipelineId}
-      annotations={annotations}
-      questionLinks={new Map(annotation.questionLinks)}
-    >
-      <div className="space-y-3">
-        <div className="flex flex-wrap items-center gap-2">
-          {viewMode}
-          <TraceDetailLink traceId={traceId} showJson={showJson} />
-          <FinishTraceAnnotation />
-        </div>
-        <PipelineQuestions
-          pipelineId={pipelineId}
-          questions={questions}
-          answers={result.answers}
-          showJson={showJson}
-          renderAnswer={(question, answer) => (
-            <TraceAnswer {...question} answer={answer} />
-          )}
-          jsonFooter={
-            <TraceQuestionAnnotations
-              questions={questions}
-              answers={result.answers}
-            />
-          }
-        />
-      </div>
-    </TraceAnnotationEditor>
   );
 }
 

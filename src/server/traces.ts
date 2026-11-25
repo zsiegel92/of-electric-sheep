@@ -2,7 +2,7 @@ import { notFound } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
-import { listPipelineVersions } from "@/lib/decisions/queries";
+import { listPipelineVersions } from "@/lib/decisions/pipeline-versions";
 import {
   deleteTraceAnnotation,
   upsertTraceAnnotation,
@@ -18,26 +18,25 @@ import { traceId } from "@/lib/traces/schemas";
 
 const traceReference = z.object({ pipelineId: z.uuid(), traceId });
 
+async function requireTracePipeline(userId: string, pipelineId: string) {
+  const [pipeline] = await listPipelineVersions(userId, [pipelineId]);
+  if (!pipeline) throw notFound();
+  const { id, displayName, model, questions } = pipeline;
+  return { id, name: displayName ?? model ?? id, questions };
+}
+
 export const listPipelineTraces = createServerFn()
   .validator(
     traceQuery.extend({
-      pipelineId: z.uuid(),
+      pipelineId: traceReference.shape.pipelineId,
       cursor: traceId.optional(),
       until: z.iso.datetime().optional(),
     }),
   )
   .handler(async ({ data: { pipelineId, ...page }, context }) => {
     const user = requireUser(context.user);
-    const [pipeline] = await listPipelineVersions(user.githubId, [pipelineId]);
-    if (!pipeline) throw notFound();
-    return {
-      pipeline: {
-        id: pipeline.id,
-        name: pipeline.displayName ?? pipeline.model ?? pipeline.id,
-        questions: pipeline.questions,
-      },
-      ...(await getPipelineTracePage(pipelineId, page)),
-    };
+    const pipeline = await requireTracePipeline(user.githubId, pipelineId);
+    return { pipeline, ...(await getPipelineTracePage(pipelineId, page)) };
   });
 
 export const getDecisionTrace = createServerFn()
@@ -46,18 +45,11 @@ export const getDecisionTrace = createServerFn()
     const user = requireUser(context.user);
     const trace = await findDecisionTrace(user.githubId, data);
     if (!trace) throw notFound();
-    const [pipeline] = await listPipelineVersions(user.githubId, [
+    const { questions, ...pipeline } = await requireTracePipeline(
+      user.githubId,
       trace.pipelineId,
-    ]);
-    if (!pipeline) throw notFound();
-    return {
-      pipeline: {
-        id: pipeline.id,
-        name: pipeline.displayName ?? pipeline.model ?? pipeline.id,
-      },
-      trace,
-      questions: pipeline.questions,
-    };
+    );
+    return { pipeline, trace, questions };
   });
 
 export const getStoredTraceAnnotations = createServerFn()

@@ -3,26 +3,23 @@ import {
   createMiddleware,
   createStart,
 } from "@tanstack/react-start";
-import { isRequestThatRequiresApiKey } from "@/lib/typesafe-api/paths";
+import { isRequestThatRequiresApiKey } from "@/lib/system-one/routes";
 import { getUser, type User } from "./lib/auth";
+
+function handlesOwnAuthentication(pathname: string) {
+  return pathname === "/api/inngest" || pathname.startsWith("/api/auth/");
+}
 
 const authenticate = createMiddleware().server<{ user: User | null }>(
   async ({ request, handlerType, next }) => {
     const pathname = new URL(request.url).pathname;
-    const isPublic =
-      pathname === "/sign-in" ||
-      pathname === "/api/inngest" ||
-      pathname.startsWith("/api/auth/");
-    if (isPublic) return next({ context: { user: null } });
-
-    if (isRequestThatRequiresApiKey(pathname)) {
-      const result = await next({ context: { user: null } });
-      result.response.headers.set("Cache-Control", "private, no-store");
-      return result;
+    if (pathname === "/sign-in" || handlesOwnAuthentication(pathname)) {
+      return next({ context: { user: null } });
     }
 
-    const user = await getUser(request.headers);
-    if (!user) {
+    const requiresApiKey = isRequestThatRequiresApiKey(pathname);
+    const user = requiresApiKey ? null : await getUser(request.headers);
+    if (!user && !requiresApiKey) {
       if (pathname.startsWith("/api/") || handlerType === "serverFn") {
         return Response.json(
           { message: "Sign in required" },
@@ -51,8 +48,7 @@ export const startInstance = createStart(() => ({
         return (
           handlerType === "serverFn" ||
           (!["GET", "HEAD", "OPTIONS"].includes(request.method) &&
-            pathname !== "/api/inngest" &&
-            !pathname.startsWith("/api/auth/") &&
+            !handlesOwnAuthentication(pathname) &&
             !isRequestThatRequiresApiKey(pathname))
         );
       },

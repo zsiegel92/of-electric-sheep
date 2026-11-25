@@ -5,11 +5,12 @@ import { PageHeader } from "@/components/page-header";
 import { PipelineEditorLink } from "@/components/pipeline-view-links";
 import { usePipelineQuestions } from "@/components/question-name";
 import { TraceTable } from "@/components/traces/trace-table";
+import { TraceViewMode } from "@/components/traces/trace-view-mode";
 import { Button } from "@/components/ui/button";
-import { ViewModeSwitch } from "@/components/view-mode-switch";
 import {
   annotationStatus,
   getTraceAnnotationFilter,
+  type TraceQuery,
   traceAnnotationFilters,
   traceOrder,
   traceOrders,
@@ -55,7 +56,7 @@ function PipelineTraces() {
         title="View Traces"
         pipelineName={data.pipeline.name}
         actions={<PipelineEditorLink pipelineId={data.pipeline.id} />}
-        controls={<TraceViewMode />}
+        controls={<TraceViewMode from={Route.fullPath} />}
       />
       <TraceFilters pipelineId={data.pipeline.id} />
       {(data.traces.length > 0 || questions.length > 0) && (
@@ -83,6 +84,16 @@ function TraceFilters({ pipelineId }: { pipelineId: string }) {
   const navigate = Route.useNavigate();
   const filter = getTraceAnnotationFilter(status);
   const exportQuery = new URLSearchParams({ status, order });
+  function updateFilters(filters: TraceQuery) {
+    void navigate({
+      search: (previous) => ({
+        ...previous,
+        ...filters,
+        after: undefined,
+        until: undefined,
+      }),
+    });
+  }
   return (
     <fieldset className="flex flex-wrap items-end gap-x-4 gap-y-2">
       <legend className="sr-only">Trace filters</legend>
@@ -93,14 +104,7 @@ function TraceFilters({ pipelineId }: { pipelineId: string }) {
           value={status}
           onChange={(event) => {
             const status = annotationStatus.parse(event.currentTarget.value);
-            void navigate({
-              search: (previous) => ({
-                ...previous,
-                status: status === "all" ? undefined : status,
-                after: undefined,
-                until: undefined,
-              }),
-            });
+            updateFilters({ status: status === "all" ? undefined : status });
           }}
         >
           {traceAnnotationFilters.map(({ id, label }) => (
@@ -117,14 +121,7 @@ function TraceFilters({ pipelineId }: { pipelineId: string }) {
           value={order}
           onChange={(event) => {
             const order = traceOrder.parse(event.currentTarget.value);
-            void navigate({
-              search: (previous) => ({
-                ...previous,
-                order: order === "recent" ? undefined : order,
-                after: undefined,
-                until: undefined,
-              }),
-            });
+            updateFilters({ order: order === "recent" ? undefined : order });
           }}
         >
           {traceOrders.map(({ id, label }) => (
@@ -193,22 +190,5 @@ function TracePagination({
         </Button>
       )}
     </nav>
-  );
-}
-
-function TraceViewMode() {
-  const { json = false } = Route.useSearch();
-  const navigate = Route.useNavigate();
-  return (
-    <ViewModeSwitch
-      showJson={json}
-      onChange={(json) =>
-        void navigate({
-          replace: true,
-          resetScroll: false,
-          search: (previous) => ({ ...previous, json: json || undefined }),
-        })
-      }
-    />
   );
 }

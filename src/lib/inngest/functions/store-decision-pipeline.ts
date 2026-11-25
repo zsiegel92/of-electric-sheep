@@ -1,5 +1,5 @@
 import { newPipelineUsed } from "@/lib/decisions/events";
-import { saveDecisionPipelineDefinition } from "@/lib/decisions/queries";
+import { saveDecisionPipelineDefinition } from "@/lib/decisions/pipeline-definitions";
 import { inngest } from "@/lib/inngest/inngest";
 
 export const storeDecisionPipeline = inngest.createFunction(

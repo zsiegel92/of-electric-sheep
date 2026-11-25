@@ -1,6 +1,6 @@
 import type { JsonValue } from "@typesafe-ai/sdk";
 import type { z } from "zod";
-import type { PipelineQuestion } from "@/lib/decisions/question-links";
+import type { PipelineQuestion } from "@/lib/decisions/pipeline-schemas";
 import type { systemOneResponse } from "@/lib/system-one/typesafe-api-schemas";
 import { cn } from "@/lib/utils";
 import { Content, DataText } from "./data-value";

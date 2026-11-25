@@ -10,10 +10,8 @@ import {
   not,
   or,
   type SQL,
-  type SQLWrapper,
   sql,
 } from "drizzle-orm";
-import { z } from "zod";
 import { getDb } from "@/lib/db/db";
 import {
   decisionPipelines,
@@ -71,7 +69,7 @@ type StoredTraceRow = Omit<
   "recordedAt" | "minConfidence" | "averageConfidence"
 >;
 
-const traceColumns = {
+export const traceColumns = {
   traceId: decisionTraces.traceId,
   pipelineId: decisionTraces.pipelineId,
   startedAt: decisionTraces.startedAt,
@@ -91,6 +89,18 @@ const traceColumns = {
 } satisfies Pick<typeof decisionTraces, keyof StoredTraceRow> & {
   annotations: SQL<TraceAnnotation[]>;
 };
+
+export const tracePipelineJoin = eq(
+  decisionPipelines.id,
+  decisionTraces.pipelineId,
+);
+
+function traceIdentity(pipelineId: string, traceId: string) {
+  return and(
+    eq(decisionTraces.pipelineId, pipelineId),
+    eq(decisionTraces.traceId, traceId),
+  );
+}
 
 function traceView({
   startedAt,
@@ -116,6 +126,8 @@ function traceView({
   };
 }
 
+export type TraceView = ReturnType<typeof traceView>;
+
 const newestDecisionTracesFirst: readonly SQL[] = [
   sql`${decisionTraces.startedAt} desc nulls last`,
   sql`${decisionTraces.traceId} desc nulls last`,
@@ -123,22 +135,17 @@ const newestDecisionTracesFirst: readonly SQL[] = [
 
 const TRACE_PAGE_SIZE = 10;
 type TraceOrdering = (typeof traceOrders)[number];
-type TracePageAnchor = Pick<
-  typeof decisionTraces.$inferSelect,
-  "traceId" | "minConfidence" | "averageConfidence"
-> & { startedAt: string };
 
 export async function getPipelineTracePage(
   pipelineId: string,
   {
     cursor,
     until,
-    status,
-    order,
+    ...filters
   }: TraceQuery & { cursor?: string | undefined; until?: string | undefined },
 ) {
   const snapshot = until ? new Date(until) : new Date();
-  const ordering = getTraceOrdering(order);
+  const { ordering, annotations, orderBy } = traceSelection(filters);
   const anchor = cursor
     ? await findTracePageAnchor(pipelineId, cursor)
     : undefined;
@@ -149,11 +156,11 @@ export async function getPipelineTracePage(
       and(
         eq(decisionTraces.pipelineId, pipelineId),
         lte(decisionTraces.recordedAt, snapshot),
-        traceAnnotationFilter(status),
+        annotations,
         anchor && tracesAfterAnchor(anchor, ordering),
       ),
     )
-    .orderBy(...tracePageOrderBy(ordering))
+    .orderBy(...orderBy)
     .limit(TRACE_PAGE_SIZE + 1);
 
   const traces = rows.slice(0, TRACE_PAGE_SIZE).map(traceView);
@@ -164,10 +171,7 @@ export async function getPipelineTracePage(
   };
 }
 
-async function findTracePageAnchor(
-  pipelineId: string,
-  traceId: string,
-): Promise<TracePageAnchor | undefined> {
+async function findTracePageAnchor(pipelineId: string, traceId: string) {
   const [anchor] = await getDb()
     .select({
       // Preserve Postgres timestamp precision when comparing against the cursor.
@@ -177,17 +181,14 @@ async function findTracePageAnchor(
       averageConfidence: decisionTraces.averageConfidence,
     })
     .from(decisionTraces)
-    .where(
-      and(
-        eq(decisionTraces.pipelineId, pipelineId),
-        eq(decisionTraces.traceId, traceId),
-      ),
-    )
-    .limit(1);
+    .where(traceIdentity(pipelineId, traceId));
   return anchor;
 }
 
-function tracesAfterAnchor(anchor: TracePageAnchor, ordering: TraceOrdering) {
+function tracesAfterAnchor(
+  anchor: NonNullable<Awaited<ReturnType<typeof findTracePageAnchor>>>,
+  ordering: TraceOrdering,
+) {
   const anchorTime = sql`${anchor.startedAt}::timestamptz`;
   const older = or(
     lt(decisionTraces.startedAt, anchorTime),
@@ -220,11 +221,16 @@ function traceAnnotationFilter(status: TraceQuery["status"]) {
   return required ? annotated : not(annotated);
 }
 
-function getTraceOrdering(order: TraceQuery["order"]): TraceOrdering {
-  return traceOrders.find(({ id }) => id === order) ?? traceOrders[0];
+export function traceSelection({ status, order }: TraceQuery) {
+  const ordering = traceOrders.find(({ id }) => id === order) ?? traceOrders[0];
+  return {
+    ordering,
+    annotations: traceAnnotationFilter(status),
+    orderBy: traceOrderBy(ordering),
+  };
 }
 
-function tracePageOrderBy(ordering: TraceOrdering): readonly SQL[] {
+function traceOrderBy(ordering: TraceOrdering): readonly SQL[] {
   if (ordering.sort === "startedAt") return newestDecisionTracesFirst;
   const column = decisionTraces[ordering.sort];
   const confidenceFirst =
@@ -234,82 +240,11 @@ function tracePageOrderBy(ordering: TraceOrdering): readonly SQL[] {
   return [confidenceFirst, ...newestDecisionTracesFirst];
 }
 
-const { startedAt, endedAt, ...exportColumns } = traceColumns;
-const traceExportFields = {
-  ...exportColumns,
-  startTime: startedAt,
-  endTime: endedAt,
-} satisfies Record<keyof ReturnType<typeof traceView>, SQLWrapper>;
-
-const traceJsonLine = sql<string>`jsonb_build_object(${sql.join(
-  Object.entries(traceExportFields).map(
-    ([key, column]) => sql`${key}::text, ${column}`,
-  ),
-  sql`, `,
-)})::text`.as("line");
-
-export async function openPipelineTraceExport(
-  userId: string,
-  pipelineId: string,
-  { status, order }: TraceQuery,
-  signal: AbortSignal,
-): Promise<ReadableStream<Uint8Array> | undefined> {
-  const db = getDb();
-  const ownedPipeline = and(
-    eq(decisionPipelines.id, pipelineId),
-    eq(decisionPipelines.userId, userId),
-  );
-  const [pipeline] = await db
-    .select({ id: decisionPipelines.id })
-    .from(decisionPipelines)
-    .where(ownedPipeline)
-    .limit(1);
-  if (!pipeline) return;
-
-  // Stream a single Postgres cursor so the export sees a consistent snapshot.
-  const query = db
-    .select({ line: traceJsonLine })
-    .from(decisionTraces)
-    .innerJoin(
-      decisionPipelines,
-      eq(decisionPipelines.id, decisionTraces.pipelineId),
-    )
-    .where(and(ownedPipeline, traceAnnotationFilter(status)))
-    .orderBy(...tracePageOrderBy(getTraceOrdering(order)))
-    .toSQL();
-  const params = z.array(z.json()).parse(query.params);
-  const cursor = db.$client
-    .unsafe<{ line: string }[]>(query.sql, params)
-    .signal(signal)
-    .cursor(16);
-  const lines = encodeTraceLines(cursor);
-  return new ReadableStream<Uint8Array>({
-    async pull(controller) {
-      const line = await lines.next();
-      if (line.done) controller.close();
-      else controller.enqueue(line.value);
-    },
-    async cancel() {
-      await lines.return(undefined);
-    },
-  });
-}
-
-async function* encodeTraceLines(cursor: AsyncIterable<{ line: string }[]>) {
-  const encoder = new TextEncoder();
-  for await (const rows of cursor) {
-    for (const { line } of rows) yield encoder.encode(`${line}\n`);
-  }
-}
-
 export async function findDecisionTrace(userId: string, traceId: string) {
   const [row] = await getDb()
     .select(traceColumns)
     .from(decisionTraces)
-    .innerJoin(
-      decisionPipelines,
-      eq(decisionPipelines.id, decisionTraces.pipelineId),
-    )
+    .innerJoin(decisionPipelines, tracePipelineJoin)
     .where(
       and(
         eq(decisionPipelines.userId, userId),
@@ -329,15 +264,11 @@ export async function getOwnedTraceAnnotations(
   const [row] = await getDb()
     .select({ annotations: traceColumns.annotations })
     .from(decisionTraces)
-    .innerJoin(
-      decisionPipelines,
-      eq(decisionPipelines.id, decisionTraces.pipelineId),
-    )
+    .innerJoin(decisionPipelines, tracePipelineJoin)
     .where(
       and(
         eq(decisionPipelines.userId, userId),
-        eq(decisionTraces.pipelineId, pipelineId),
-        eq(decisionTraces.traceId, traceId),
+        traceIdentity(pipelineId, traceId),
       ),
     );
   return row?.annotations ?? null;

@@ -1,7 +1,7 @@
 import type { z } from "zod";
-import { apiKeyHeader, apiKeySecret } from "@/lib/api-keys/schemas";
+import { apiKeySecret } from "@/lib/api-keys/schemas";
 import { tracedSystemOneResponse } from "@/lib/traces/schemas";
-import { systemOneRoutes } from "@/server/system-one/routes";
+import { apiBasePath, systemOneRoutes } from "./routes";
 import { systemOneRequest } from "./typesafe-api-schemas";
 
 export type SystemOneInput = z.input<typeof systemOneRequest>;
@@ -11,13 +11,13 @@ export async function decide(
   { apiKey, baseUrl }: { apiKey: string; baseUrl?: URL | string },
 ) {
   const { method, path } = systemOneRoutes.decide;
-  const endpoint = `/api${path}`;
+  const endpoint = `${apiBasePath}${path}`;
   const response = await fetch(
     baseUrl ? new URL(endpoint, baseUrl) : endpoint,
     {
       method,
       headers: {
-        [apiKeyHeader]: apiKeySecret.parse(apiKey),
+        Authorization: `Bearer ${apiKeySecret.parse(apiKey)}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(systemOneRequest.parse(input)),

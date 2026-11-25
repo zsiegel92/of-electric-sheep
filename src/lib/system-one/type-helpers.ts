@@ -1,7 +1,6 @@
 import { type ErrorMap, ORPCError } from "@orpc/server";
 import { Image, type SystemOneRequest } from "@typesafe-ai/sdk";
 import { z } from "zod";
-import type { RouteRequestBody } from "@/server/route-group";
 import { inlineImage, systemOneRequest } from "./typesafe-api-schemas";
 
 const assetName = z.string().min(1);
@@ -51,80 +50,10 @@ export const typesafeErrors = {
   SERVICE_UNAVAILABLE: { message: "TypeSafe credentials are not configured" },
 } satisfies ErrorMap;
 
-const state =
-  "The parcel arrived two days late, but the customer is satisfied with the replacement.";
-const examples = {
-  noul: {
-    summary: "Yes/no question",
-    value: {
-      model: "jev-latest",
-      state,
-      questions: {
-        late: { type: "noul", instructions: "Did delivery run late?" },
-      },
-    },
-  },
-  choice: {
-    summary: "Choose a category",
-    value: {
-      model: "jev-latest",
-      state,
-      questions: {
-        topic: {
-          type: "choice",
-          criteria: {
-            shipping: "Concerns about delivery",
-            product: "Concerns about the item",
-          },
-        },
-      },
-    },
-  },
-  score: {
-    summary: "Rate against a rubric",
-    value: {
-      model: "jev-latest",
-      state,
-      questions: {
-        urgency: {
-          type: "score",
-          criteria: ["No action", "Review soon", "Immediate attention"],
-        },
-      },
-    },
-  },
-  box: {
-    summary: "Locate an image region (enable the images header)",
-    value: {
-      model: "jev-preview",
-      state: "photo",
-      questions: {
-        region: {
-          type: "box",
-          instructions: "Locate the visible foreground region.",
-        },
-      },
-      assets: {
-        photo: {
-          type: "image",
-          format: "png",
-          data_base64:
-            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aW1sAAAAASUVORK5CYII=",
-        },
-      },
-    },
-  },
-} satisfies Record<
-  string,
-  { summary: string; value: z.input<typeof systemOneRequest> }
->;
-
 const requestPart = z.union([z.string(), z.file()]);
-export const upload = z.object({ request: requestPart }).catchall(z.file());
+const upload = z.object({ request: requestPart }).catchall(z.file());
 
-export async function parseSystemOneMultipartRequest(
-  input: z.output<typeof upload>,
-) {
+async function parseSystemOneMultipartRequest(input: z.output<typeof upload>) {
   const { request, ...files } = input;
   const json = typeof request === "string" ? request : await request.text();
   let parsed: unknown;
@@ -196,9 +125,9 @@ const headersSchema = z.object({
 });
 
 export const decisionOptionsSchema = z.object({ headers: headersSchema });
-export type DecisionOptions = z.output<typeof decisionOptionsSchema>;
+type DecisionOptions = z.output<typeof decisionOptionsSchema>;
 
-export const decisionInputBody = z.union([systemOneRequest, upload]);
+const decisionInputBody = z.union([systemOneRequest, upload]);
 export type DecisionInputBody = z.output<typeof decisionInputBody>;
 
 export type DecisionCapabilities = {
@@ -314,17 +243,3 @@ export const decisionInput = z.object({
   headers: headersSchema.extend(pipelineRoutingHeaders.shape),
   body: decisionInputBody,
 });
-
-export const decisionRequestBody = {
-  required: true,
-  content: {
-    "application/json": {
-      schema: { $ref: "#/components/schemas/SystemOneRequest" },
-      examples,
-    },
-    "multipart/form-data": {
-      schema: { $ref: "#/components/schemas/SystemOneUpload" },
-      encoding: { request: { contentType: "application/json" } },
-    },
-  },
-} satisfies RouteRequestBody;

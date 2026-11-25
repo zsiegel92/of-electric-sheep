@@ -2,19 +2,17 @@ import "@tanstack/react-start/server-only";
 import { promisify } from "node:util";
 import { zstdDecompress } from "node:zlib";
 import { apiKeyHeader } from "@/lib/api-keys/schemas";
-import { typeSafeApiAlias } from "./paths";
+import { isTypeSafeSdkPath } from "@/lib/system-one/routes";
 
 const decompress = promisify(zstdDecompress);
 
 export async function reshapeTypeSafeApiRequest(
   request: Request,
 ): Promise<Request | Response> {
-  const url = new URL(request.url);
-  const alias = typeSafeApiAlias(url.pathname);
-  if (!alias) return request;
+  if (!isTypeSafeSdkPath(new URL(request.url).pathname)) return request;
 
-  url.pathname = alias;
-  const reshaped = new Request(url, request);
+  // Use the URL and request fields so this also accepts Nitro's request wrapper.
+  const reshaped = new Request(request.url, request);
   const bearer = reshaped.headers
     .get("authorization")
     ?.match(/^Bearer (\S+)$/i)?.[1];
@@ -30,7 +28,7 @@ export async function reshapeTypeSafeApiRequest(
     });
     reshaped.headers.delete("content-encoding");
     reshaped.headers.delete("content-length");
-    return new Request(url, {
+    return new Request(request.url, {
       method: reshaped.method,
       headers: reshaped.headers,
       signal: reshaped.signal,

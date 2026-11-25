@@ -1,15 +1,38 @@
+import type { ComponentProps } from "react";
+import { PipelineQuestions } from "@/components/pipeline-questions";
 import { QuestionName } from "@/components/question-name";
 import type { Answers, NamedQuestion } from "@/components/question-view";
 import { annotationChoices } from "@/lib/traces/annotations";
 import { TraceAnswer } from "./trace-annotation";
 
-export function TraceQuestionAnnotations({
+export function TraceQuestions(
+  props: Pick<
+    ComponentProps<typeof PipelineQuestions>,
+    "questions" | "answers" | "pipelineId" | "showJson"
+  >,
+) {
+  return (
+    <PipelineQuestions
+      {...props}
+      renderAnswer={(question, answer) => (
+        <TraceAnswer {...question} answer={answer} />
+      )}
+      jsonFooter={
+        <TraceQuestionAnnotations
+          questions={props.questions}
+          answers={props.answers}
+        />
+      }
+    />
+  );
+}
+
+function TraceQuestionAnnotations({
   questions,
   answers,
 }: {
   questions: NamedQuestion[];
   answers: Answers | undefined;
-  choicesByQuestion?: ReadonlyMap<string, ReturnType<typeof annotationChoices>>;
 }) {
   const items = questions.flatMap((question) => {
     const choices = annotationChoices(question.question);

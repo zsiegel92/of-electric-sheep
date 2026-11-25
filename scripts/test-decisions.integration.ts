@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import { test } from "node:test";
-import { OpenAPIHandler } from "@orpc/openapi/fetch";
+import { zstdCompressSync } from "node:zlib";
+import type { OpenAPI } from "@orpc/openapi";
 import { DrizzleQueryError, eq, inArray } from "drizzle-orm";
 import { PostgresError } from "postgres";
 import { z } from "zod";
@@ -23,31 +24,35 @@ import {
   newPipelineUsed,
   pipelineUsed,
 } from "../src/lib/decisions/events";
-import { pipelineDefinitionSchema } from "../src/lib/decisions/pipeline-schemas";
 import {
   ensureDecisionPipeline,
-  evolveDecisionPipeline,
-  listPipelineVersions,
-  promoteDecisionPipeline,
   saveDecisionPipelineDefinition,
+} from "../src/lib/decisions/pipeline-definitions";
+import {
+  evolveDecisionPipeline,
+  promoteDecisionPipeline,
   saveQuestionLinks,
-} from "../src/lib/decisions/queries";
+} from "../src/lib/decisions/pipeline-groups";
+import { pipelineDefinitionSchema } from "../src/lib/decisions/pipeline-schemas";
+import { listPipelineVersions } from "../src/lib/decisions/pipeline-versions";
 import { matchQuestions } from "../src/lib/decisions/question-links";
 import { inngest } from "../src/lib/inngest/inngest";
+import {
+  isRequestThatRequiresApiKey,
+  systemOneRoutes,
+} from "../src/lib/system-one/routes";
 import { exactPipelineHeader } from "../src/lib/system-one/type-helpers";
 import { systemOneRequest } from "../src/lib/system-one/typesafe-api-schemas";
 import { upsertTraceAnnotation } from "../src/lib/traces/annotation-queries";
+import { openPipelineTraceExport } from "../src/lib/traces/export";
 import type { TraceQuery } from "../src/lib/traces/filters";
 import {
   findDecisionTrace,
   getOwnedTraceAnnotations,
   getPipelineTracePage,
-  openPipelineTraceExport,
   storeTrace,
 } from "../src/lib/traces/queries";
-import { isRequestThatRequiresApiKey } from "../src/lib/typesafe-api/paths";
-import { systemOneRouter } from "../src/server/system-one/router";
-import { systemOneRoutes } from "../src/server/system-one/routes";
+import { handleOpenApiRequest } from "../src/server/api/openapi";
 import { withTestScriptDb } from "./test-db";
 
 const input = systemOneRequest.parse({
@@ -66,6 +71,15 @@ const definition = pipelineDefinitionSchema.parse({
   ...input,
   options: { headers: {} },
 });
+const modelCatalog = {
+  models: [
+    {
+      name: "test-model",
+      description: "Test model",
+      release_date: "2025-01-01",
+    },
+  ],
+};
 
 type UsageEvent =
   | ReturnType<typeof newPipelineUsed.create>
@@ -96,6 +110,11 @@ await test("decision processing integration", async (t) => {
     return user;
   };
   const server = createServer(async (request, response) => {
+    if (request.method === "GET" && request.url === "/default/v1/models") {
+      response.setHeader("Content-Type", "application/json");
+      response.end(JSON.stringify(modelCatalog));
+      return;
+    }
     const chunks: Buffer[] = [];
     for await (const chunk of request) chunks.push(Buffer.from(chunk));
     const body = JSON.parse(Buffer.concat(chunks).toString());
@@ -188,7 +207,6 @@ await test("decision processing integration", async (t) => {
         return user;
       };
       const replayPath = `/api${systemOneRoutes.decideByPipeline.path}`;
-      const api = new OpenAPIHandler(systemOneRouter);
       const post = async (
         path: string,
         body: unknown,
@@ -203,12 +221,7 @@ await test("decision processing integration", async (t) => {
           headers,
           body: JSON.stringify(body),
         });
-        const { response } = await api.handle(request, {
-          prefix: "/api",
-          context: { headers },
-        });
-        assert.ok(response);
-        return response;
+        return handleOpenApiRequest(request, null);
       };
       const replay = (pipelineId: string, secret?: string, exact = false) =>
         post(
@@ -218,6 +231,76 @@ await test("decision processing integration", async (t) => {
           exact,
         );
       try {
+        await t.test(
+          "SDK endpoints are documented and accept SDK requests",
+          async () => {
+            const user = await registerUser();
+            const { secret } = await createApiKey(user, "SDK test");
+            const specResponse = await handleOpenApiRequest(
+              new Request("http://localhost/api/openapi.json"),
+              user,
+            );
+            assert.equal(specResponse.status, 200);
+            const spec: OpenAPI.Document = await specResponse.json();
+            assert.deepEqual(spec.servers, [{ url: "/api" }]);
+            const sdkSecurity = [{ TypeSafeBearer: [] }, { ApiKey: [] }];
+            assert.deepEqual(
+              spec.paths?.["/v1/systemone"]?.post?.security,
+              sdkSecurity,
+            );
+            assert.deepEqual(
+              spec.paths?.["/v1/models"]?.get?.security,
+              sdkSecurity,
+            );
+            const bearer = spec.components?.securitySchemes?.["TypeSafeBearer"];
+            assert.ok(bearer && "type" in bearer && bearer.type === "http");
+            assert.equal(bearer.scheme, "bearer");
+            assert.equal(spec.paths?.["/system-one"], undefined);
+            assert.equal(spec.paths?.["/system-one/models"], undefined);
+
+            const sdkRequest = (body: BodyInit) =>
+              handleOpenApiRequest(
+                new Request("http://localhost/api/v1/systemone", {
+                  method: "POST",
+                  headers: {
+                    Authorization: `Bearer ${secret}`,
+                    "Content-Type": "application/json",
+                    "Content-Encoding": "zstd",
+                  },
+                  body,
+                }),
+                null,
+              );
+            assert.equal((await sdkRequest("invalid zstd")).status, 400);
+            const compressed = new Uint8Array(
+              zstdCompressSync(JSON.stringify(input)),
+            );
+            const result = await sdkRequest(compressed);
+            assert.equal(result.status, 200);
+            assert.equal((await result.json()).model, "test-model");
+            assert.deepEqual(calls[0]?.body, input);
+            assert.equal(calls.length, 1);
+            assert.equal(
+              (await post("/api/system-one", input, secret)).status,
+              404,
+            );
+            const modelsUrl = "http://localhost/api/v1/models";
+            const unauthorized = await handleOpenApiRequest(
+              new Request(modelsUrl),
+              null,
+            );
+            assert.equal(unauthorized.status, 401);
+            const models = await handleOpenApiRequest(
+              new Request(modelsUrl, {
+                headers: { Authorization: `Bearer ${secret}` },
+              }),
+              null,
+            );
+            assert.equal(models.status, 200);
+            assert.deepEqual(await models.json(), modelCatalog);
+          },
+        );
+
         await t.test(
           "a new decision uses the default upstream and publishes a creation event",
           async () => {
@@ -432,6 +515,16 @@ await test("decision processing integration", async (t) => {
                 .split("\n")
                 .map((line) => exportedTrace.parse(JSON.parse(line)));
             }
+            const partialExport = await openPipelineTraceExport(
+              user.githubId,
+              pipeline.id,
+              {},
+              new AbortController().signal,
+            );
+            assert.ok(partialExport);
+            const reader = partialExport.getReader();
+            assert.equal((await reader.read()).done, false);
+            await reader.cancel();
             const exportAll = await exportRows({ order: "most-average" });
             assert.deepEqual(
               exportAll.map((row) => row.traceId),

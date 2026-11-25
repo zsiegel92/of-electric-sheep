@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
+import { openPipelineTraceExport } from "@/lib/traces/export";
 import { traceQuery } from "@/lib/traces/filters";
-import { openPipelineTraceExport } from "@/lib/traces/queries";
 
 export const Route = createFileRoute("/api/traces/$pipelineId/export")({
   server: {

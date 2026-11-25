@@ -1,4 +1,5 @@
 import { type ReactNode, useState } from "react";
+import { pipelineQuestionRecord } from "@/lib/decisions/pipeline-schemas";
 import {
   AlignedJsonColumns,
   type JsonRow,
@@ -70,9 +71,7 @@ function QuestionJsonColumns({
   pipelineId?: string | undefined;
   answers: Answers | undefined;
 }) {
-  const definitions = Object.fromEntries(
-    questions.map(({ name, question }) => [name, question]),
-  );
+  const definitions = pipelineQuestionRecord(questions);
   const names = [
     ...questions.map(({ name }) => name),
     ...Object.keys(answers ?? {}).filter(

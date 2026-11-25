@@ -25,12 +25,15 @@ import {
   type PipelineUsage,
   pipelineUsed,
 } from "./events";
+import { ensureDecisionPipeline } from "./pipeline-definitions";
 import {
   type PipelineDefinition,
+  type PipelineVersion,
   pipelineDefinitionSchema,
+  pipelineQuestionRecord,
 } from "./pipeline-schemas";
-import { ensureDecisionPipeline, findPipelineVersions } from "./queries";
-import { matchQuestions, type PipelineVersion } from "./question-links";
+import { findPipelineVersions } from "./pipeline-versions";
+import { matchQuestions } from "./question-links";
 
 // Leave room for the event envelope on Inngest plans with a 256 KiB limit.
 const TRACE_EVENT_BUDGET_BYTES = 255 * 1024;
@@ -200,9 +203,7 @@ async function runStoredVersion(
   }
   const definition = pipelineDefinitionSchema.parse({
     model: primary.model,
-    questions: Object.fromEntries(
-      primary.questions.map(({ name, question }) => [name, question]),
-    ),
+    questions: pipelineQuestionRecord(primary.questions),
     options: primary.options,
   });
   const { model, questions, options } = definition;

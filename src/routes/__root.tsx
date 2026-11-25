@@ -6,7 +6,7 @@ import {
 } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { Navbar } from "../components/navbar";
-import { getCurrentUser } from "../server/functions";
+import { getCurrentUser } from "../server/session";
 import styles from "../styles.css?url";
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(

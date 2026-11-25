@@ -1,24 +1,4 @@
-import type { PipelineDefinition } from "./pipeline-schemas";
-
-export type PipelineQuestion = {
-  name: string;
-  alias: string | null;
-  answerShape: string;
-  primaryName: string | null;
-  question: PipelineDefinition["questions"][string];
-};
-
-export type PipelineVersion = {
-  id: string;
-  primaryGroupedPipelineId: string;
-  displayName: string | null;
-  uiIgnored: boolean;
-  baseUrl: string | null;
-  createdAt: string;
-  model: string | null;
-  options: PipelineDefinition["options"] | null;
-  questions: PipelineQuestion[];
-};
+import type { PipelineQuestion, PipelineVersion } from "./pipeline-schemas";
 
 // The label also serves as a stable key for the multiset of question types.
 export function pipelineQuestionKinds(questions: PipelineQuestion[]) {

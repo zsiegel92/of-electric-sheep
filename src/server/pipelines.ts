@@ -7,12 +7,14 @@ import { pipelineDraftSchema } from "@/lib/decisions/pipeline-draft";
 import {
   editablePipelineBaseUrls,
   evolveDecisionPipeline,
-  listPipelineVersions,
   promoteDecisionPipeline,
   saveQuestionLinks,
+} from "@/lib/decisions/pipeline-groups";
+import {
+  listPipelineVersions,
   setPipelineQuestionAlias,
   updatePipelineMetadata,
-} from "@/lib/decisions/queries";
+} from "@/lib/decisions/pipeline-versions";
 import {
   pipelineQuestionKinds,
   questionAnswerShapes,
@@ -40,12 +42,9 @@ export const listPipelines = createServerFn().handler(async ({ context }) => {
 export const getPipelineVersions = createServerFn()
   .validator(z.array(id).max(3))
   .handler(({ data, context }) =>
-    listPipelineVersions(
-      requireUser(context.user).githubId,
-      data,
-      undefined,
-      true,
-    ),
+    listPipelineVersions(requireUser(context.user).githubId, data, {
+      includePrimary: true,
+    }),
   );
 
 export const getPipelineQuestions = createServerFn()

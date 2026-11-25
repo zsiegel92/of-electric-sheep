@@ -3,17 +3,15 @@ import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { z } from "zod";
 import { PageHeader } from "@/components/page-header";
-import {
-  PipelineComparison,
-  pipelineSnapshot,
-} from "@/components/pipeline-diff";
+import { PipelineComparison } from "@/components/pipeline-diff";
 import { QuestionName } from "@/components/question-name";
 import { Button } from "@/components/ui/button";
 import { ViewModeSwitch } from "@/components/view-mode-switch";
+import { pipelineSnapshot } from "@/lib/decisions/pipeline-draft";
+import type { PipelineVersion } from "@/lib/decisions/pipeline-schemas";
 import {
   compatibleQuestions,
   matchQuestions,
-  type PipelineVersion,
   pipelineQuestionKinds,
 } from "@/lib/decisions/question-links";
 import {
