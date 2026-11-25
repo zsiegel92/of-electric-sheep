@@ -687,6 +687,30 @@ wheels = [
 ]
 
 [[package]]
+name = "inngest"
+version = "0.5.20"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "httpx" },
+    { name = "jcs" },
+    { name = "pydantic" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/8a/06/8c8660e32c4609e1f89845fe34853de039d3bd2ce26f9c3f75c125c5810c/inngest-0.5.20.tar.gz", hash = "sha256:eda7f333aae34d64533ad0c985b577016f622bd5438027083ad8a020c9347fac", size = 184244, upload-time = "2026-11-02T20:02:57.628Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/87/e8/e002a5773b80b795cd7bd0e590545e061d402d47c882241ce0d8ce362835/inngest-0.5.20-py3-none-any.whl", hash = "sha256:154650839dceb3d6a97755f639eb21c6cc8a98a1f5b664c770c3e9edbfce22b8", size = 247005, upload-time = "2026-11-02T20:02:55.972Z" },
+]
+
+[[package]]
+name = "jcs"
+version = "0.3.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/33/c9/6dc379416691ab9b576b5fd88f14ddb4900376566350a6a1c2e55238d983/jcs-0.3.0.tar.gz", hash = "sha256:92fecdd084a3e2cf896d11fdd5e2c52b6b86996061a3455fb3a4885cf651c6d6", size = 14262, upload-time = "2026-11-06T18:42:23.761Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/52/5b/e767349db2c71dff47d3692c30d780443ba5dfb844b626ef6fd54debc817/jcs-0.3.0-py3-none-any.whl", hash = "sha256:c8e0113e717873f22ea7090cf877eed45a8715997eedc60c18ff789a3e89106d", size = 15790, upload-time = "2026-11-06T18:42:22.618Z" },
+]
+
+[[package]]
 name = "langfuse"
 version = "5.2.0"
 source = { registry = "https://pypi.org/simple" }
@@ -885,6 +909,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "fastapi" },
     { name = "httpx" },
+    { name = "inngest" },
     { name = "langfuse" },
     { name = "psycopg", extra = ["binary", "pool"] },
     { name = "pydantic-settings" },
@@ -912,6 +937,7 @@ dev = [
 requires-dist = [
     { name = "fastapi" },
     { name = "httpx" },
+    { name = "inngest", specifier = ">=0.5.20" },
     { name = "langfuse", specifier = ">=3" },
     { name = "modal", marker = "extra == 'modal'" },
     { name = "psycopg", extras = ["binary", "pool"] },

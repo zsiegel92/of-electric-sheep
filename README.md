@@ -12,11 +12,11 @@ make env
 make dev
 ```
 
-`make dev` starts the bundled Postgres instance when `DATABASE_URL` points to it, applies migrations, and runs Vite and Uvicorn with reload. Open [localhost:5173](http://localhost:5173). Vite proxies `/api` to FastAPI on port 8080. Ctrl-C stops Vite and Uvicorn. Use `make db-stop` to stop the bundled Postgres instance.
+`make dev` starts the bundled Postgres instance when `DATABASE_URL` points to it, applies migrations, and runs Vite, Uvicorn, and the Inngest Dev Server. Open [localhost:5173](http://localhost:5173) for the app and [localhost:8288](http://localhost:8288) for Inngest runs. Vite proxies `/api` to FastAPI on port 8080. Ctrl-C stops the three processes. Use `make db-stop` to stop the bundled Postgres instance.
 
 Set `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `ALLOWED_GITHUB_USER_IDS`, and `TYPESAFE_API_KEY` in `.env`. Register `http://localhost:5173/api/auth/callback/github` as a GitHub OAuth callback. Run `gh api user --jq .id` to get your account ID. The allowlist applies to sign-in, existing sessions, and API keys.
 
-Run `make generate` after changing an API contract, and commit the regenerated client in `src/generated`. Use `make build` followed by `make start` to serve the production SPA and API together on port 8080. Add the port 8080 callback to GitHub if you sign in through that origin.
+Run `make generate` after changing an API contract, and commit the regenerated client in `src/generated`. Use `make build` followed by `make start` to serve the built SPA and API on port 8080 and start the Inngest Dev Server. Add the port 8080 callback to GitHub if you sign in through that origin.
 
 ## Databases and migrations
 
@@ -35,6 +35,8 @@ To copy an existing Drizzle database, set `OLD_DATABASE_URL` to the source and `
 
 Authenticate the Modal CLI in the environment you want to use. Create a Modal Secret named `of-electric-sheep`, or export `SHEEP_MODAL_SECRET_NAME` to select another secret. Configure a database URL reachable from Modal and apply Atlas migrations to that database before deploying. Supply the auth, GitHub, allowlist, and TypeSafe settings from `.env.example` in the secret.
 
+Both deployment targets serve the Inngest worker at `/api/inngest` on the same FastAPI app. The Modal secret `inngest` supplies `INNGEST_EVENT_KEY` and `INNGEST_SIGNING_KEY`. Export `SHEEP_INNGEST_SECRET_NAME` to select another secret. To sync automatically after deploying, set an environment-scoped `INNGEST_API_KEY` and `SHEEP_DEPLOYED_BACKEND_URL` in your shell or `.env`. You can also run `make inngest-sync` separately with those values, or sync the deployed `/api/inngest` endpoint in the Inngest dashboard. [Inngest app sync](https://www.inngest.com/docs/platform-and-operations/apps-and-syncs)
+
 - `make deploy-python` deploys the FastAPI backend.
 - `make deploy` builds the frontend and deploys it alongside FastAPI at the same origin.
 - `make dev-modal-serve` starts `modal serve` and Vite together. Set `SHEEP_MODAL_SERVE_URL` in `.env` or your shell. To get the URL the first time, run `uv run --locked --extra modal modal serve modal_app.py` and copy the endpoint it prints.
@@ -46,7 +48,7 @@ For either Vite workflow, include `http://localhost:5173` in the backend's `AUTH
 
 Open `/api/docs` after sign-in. TypeSafe SDK clients can use the app's `/api` base URL with an Of Electric Sheep API key. The SDK calls `GET /api/v1/models` and `POST /api/v1/systemone`. System One supports JSON, multipart images, and zstd encoding. `POST /api/system-one/decide-by-pipeline` replays a saved pipeline.
 
-Pipeline definitions and traces are persisted directly in Postgres. The trace dashboard supports confidence sorting, annotations, and JSONL export. Run `uv run --locked python -m scripts.tail_traces <pipeline-id>` to read recent traces from the CLI. Configure the optional Langfuse settings in `.env.example` to export generations and show observability links.
+FastAPI saves pipeline definitions and user records inline. Decision requests publish `decisions/trace.completed`, and an Inngest worker saves the trace to Postgres with retries. The trace can take a moment to appear. Oversized events omit state or answers and are marked as truncated. The trace dashboard supports confidence sorting, annotations, and JSONL export. Run `uv run --locked python -m scripts.tail_traces <pipeline-id>` to read recent traces from the CLI. Configure the optional Langfuse settings in `.env.example` to export generations and show observability links.
 
 ## Checks
 

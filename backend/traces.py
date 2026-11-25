@@ -1,17 +1,23 @@
 from datetime import UTC, datetime
 from typing import Literal, LiteralString
 from urllib.parse import quote, urlencode, urlsplit, urlunsplit
+from uuid import UUID
 
 from fastapi import HTTPException
 from psycopg import sql
 from psycopg.types.json import Jsonb
+from pydantic import BaseModel
 
 from backend.contracts import (
+    Answers,
+    Content,
     TraceDetails,
+    TraceId,
     TraceOrder,
     TracePage,
     TracePipeline,
     TracePipelineSummary,
+    Usage,
 )
 from backend.db import pool
 from backend.pipelines import get_version
@@ -42,6 +48,20 @@ CONFIDENCE_ORDER: dict[
 }
 
 
+class DecisionTraceRecord(BaseModel):
+    pipelineId: UUID
+    traceId: TraceId
+    startedAt: datetime
+    endedAt: datetime | None = None
+    model: str | None = None
+    failed: bool
+    state: Content | None = None
+    answers: Answers | None = None
+    usage: Usage | None = None
+    observabilityUrl: str | None = None
+    payloadTruncated: bool = False
+
+
 def observability_url(trace_id):
     conf = settings()
     if not (project := conf.langfuse_project_id.strip()):
@@ -55,8 +75,8 @@ def observability_url(trace_id):
     )
 
 
-def store_trace(db, pipeline_id, trace_id, started, payload, *, result=None, url=None):
-    answers = result.answers if result else {}
+def store_trace(db, record: DecisionTraceRecord):
+    answers = record.answers or {}
     confidence = [
         max(answer["noul"], 1 - answer["noul"])
         if answer["type"] == "noul"
@@ -67,24 +87,27 @@ def store_trace(db, pipeline_id, trace_id, started, payload, *, result=None, url
     db.execute(
         """INSERT INTO decision_traces
           (pipeline_id, trace_id, started_at, ended_at, model, failed, state, answers, usage,
-           min_confidence, average_confidence, observability_url)
-        VALUES (%(pipeline_id)s, %(trace_id)s, %(started_at)s, now(), %(model)s, %(failed)s,
-                %(state)s, %(answers)s, %(usage)s, %(min_confidence)s, %(average_confidence)s, %(observability_url)s)
+           min_confidence, average_confidence, observability_url, payload_truncated)
+        VALUES (%(pipeline_id)s, %(trace_id)s, %(started_at)s, %(ended_at)s, %(model)s, %(failed)s,
+                %(state)s, %(answers)s, %(usage)s, %(min_confidence)s, %(average_confidence)s,
+                %(observability_url)s, %(payload_truncated)s)
         ON CONFLICT (pipeline_id, trace_id) DO NOTHING""",
         {
-            "pipeline_id": pipeline_id,
-            "trace_id": trace_id,
-            "started_at": started,
-            "model": result.model if result else payload.model,
-            "failed": result is None,
-            "state": Jsonb(payload.state),
-            "answers": Jsonb(answers) if result else None,
-            "usage": Jsonb(result.usage) if result else None,
+            "pipeline_id": record.pipelineId,
+            "trace_id": record.traceId,
+            "started_at": record.startedAt,
+            "ended_at": record.endedAt,
+            "model": record.model,
+            "failed": record.failed,
+            "state": Jsonb(record.state) if record.state is not None else None,
+            "answers": Jsonb(record.answers) if record.answers is not None else None,
+            "usage": Jsonb(record.usage) if record.usage is not None else None,
             "min_confidence": min(confidence) if confidence else None,
             "average_confidence": sum(confidence) / len(confidence)
             if confidence
             else None,
-            "observability_url": url,
+            "observability_url": record.observabilityUrl,
+            "payload_truncated": record.payloadTruncated,
         },
     )
 

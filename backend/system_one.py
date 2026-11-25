@@ -33,6 +33,7 @@ from backend.contracts import (
     TracedDecision,
 )
 from backend.db import pool
+from backend.jobs import publish_trace
 from backend.pipelines import (
     definition_for,
     ensure_pipeline,
@@ -40,7 +41,7 @@ from backend.pipelines import (
     read_versions,
 )
 from backend.settings import settings
-from backend.traces import observability_url, store_trace
+from backend.traces import DecisionTraceRecord, observability_url
 
 IMAGES = "typesafe-danger-zone-images"
 LONG_CONTEXT = "typesafe-danger-zone-long-context"
@@ -313,14 +314,24 @@ def run(pipeline, payload, headers):
             except Exception:
                 LOG.warning("Could not flush Langfuse traces", exc_info=True)
         try:
-            with pool().connection() as db:
-                store_trace(
-                    db, pipeline.id, trace_id, started, payload, result=result, url=url
+            publish_trace(
+                DecisionTraceRecord(
+                    pipelineId=pipeline.id,
+                    traceId=trace_id,
+                    startedAt=started,
+                    endedAt=datetime.now(UTC),
+                    model=result.model if result else payload.model,
+                    failed=result is None,
+                    state=payload.state,
+                    answers=result.answers if result else None,
+                    usage=result.usage if result else None,
+                    observabilityUrl=url,
                 )
+            )
         except Exception:
             if result is not None:
                 raise
-            LOG.exception("Could not save failed decision trace %s", trace_id)
+            LOG.exception("Could not publish failed decision trace %s", trace_id)
     if result is None:
         raise RuntimeError("Decision completed without a result.")
     return TracedDecision(**result.model_dump(), traceId=trace_id)

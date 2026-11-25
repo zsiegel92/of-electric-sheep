@@ -11,17 +11,21 @@ from unittest.mock import patch
 from urllib.parse import parse_qs, urlsplit
 
 import httpx
+import inngest
 import zstandard
 from fastapi import Response
 from fastapi.testclient import TestClient
 
 from backend.auth import COOKIE, User, issue_session
 from backend.db import pool
+from backend.jobs import TRACE_COMPLETED, persist_trace
+from backend.jobs import client as inngest_client
 from backend.main import app
 from backend.migrate import dev_database, with_search_path
 from backend.oauth import CALLBACK
 from backend.pipelines import hash_pipeline
 from backend.settings import settings
+from backend.traces import DecisionTraceRecord
 
 ORIGIN = "http://localhost:5173"
 ORIGIN_HEADER = {"Origin": ORIGIN}
@@ -124,12 +128,26 @@ class ApiTest(unittest.TestCase):
     def setUp(self):
         self.frontend = signed_client(USER)
         self.addCleanup(self.frontend.close)
+        self.trace_events: list[inngest.Event] = []
+        self.enterContext(
+            patch.object(
+                inngest_client, "send_sync", side_effect=self.deliver_trace_event
+            )
+        )
         key = self.frontend.post(
             "/api/api-keys", json={"name": self._testMethodName}, headers=ORIGIN_HEADER
         )
         self.assertEqual(key.status_code, 201, key.text)
         self.key = key.json()
         self.bearer = {"Authorization": f"Bearer {self.key['secret']}"}
+
+    def deliver_trace_event(self, event: inngest.Event) -> list[str]:
+        self.assertEqual(event.name, TRACE_COMPLETED)
+        self.trace_events.append(event)
+        record = DecisionTraceRecord.model_validate(event.data)
+        self.assertEqual(event.id, f"decision-trace-{record.traceId}")
+        persist_trace(record)
+        return [record.traceId]
 
     def test_oauth_and_key_access(self):
         with TestClient(app, base_url=ORIGIN) as anonymous:
@@ -305,6 +323,35 @@ class ApiTest(unittest.TestCase):
         ).json()["traces"]
         self.assertTrue(failed_traces[0]["failed"])
         self.assertEqual(failed_traces[0]["model"], "fail-test")
+        self.assertEqual(
+            [event.data["failed"] for event in self.trace_events], [False, True]
+        )
+
+    def test_inngest_endpoint_is_internal(self):
+        self.assertEqual(self.frontend.get("/api/inngest").json()["function_count"], 1)
+        paths = self.frontend.get("/api/openapi.json").json()["paths"]
+        self.assertNotIn("/api/inngest", paths)
+
+    def test_trace_event_truncates_oversized_state_and_can_be_retried(self):
+        decision = self.frontend.post(
+            "/api/v1/systemone",
+            json={
+                "model": "large-state",
+                "state": "x" * (260 * 1024),
+                "questions": {
+                    "matched": {"type": "noul", "instructions": "Does it match?"}
+                },
+            },
+            headers=self.bearer,
+        )
+        self.assertEqual(decision.status_code, 200, decision.text)
+        (event,) = self.trace_events
+        self.assertTrue(event.data["payloadTruncated"])
+        self.assertNotIn("state", event.data)
+        persist_trace(DecisionTraceRecord.model_validate(event.data))
+        detail = self.frontend.get(f"/api/traces/{decision.json()['traceId']}").json()
+        self.assertTrue(detail["trace"]["payloadTruncated"])
+        self.assertIn("matched", detail["trace"]["answers"])
 
     def test_pipeline_versions_trace_annotations_and_export(self):
         definition = {

@@ -1,6 +1,6 @@
 .PHONY: install env db db-stop db-generate db-migrate db-hash db-copy-data generate \
-	dev dev-backend dev-frontend dev-modal-serve dev-frontend-deployed-backend \
-	build start deploy deploy-python check test-integration favicon
+	dev dev-backend dev-frontend dev-inngest dev-modal-serve dev-frontend-deployed-backend \
+	build start deploy deploy-python inngest-sync check test-integration favicon
 
 PYTHON = uv run --locked
 MODAL = $(PYTHON) --extra modal
@@ -35,13 +35,16 @@ generate:
 
 dev: db generate
 	$(MAKE) db-migrate
-	pnpm exec concurrently --kill-others --names api,web "$(MAKE) dev-backend" "$(MAKE) dev-frontend"
+	pnpm exec concurrently --kill-others --names api,web,inngest "$(MAKE) dev-backend" "$(MAKE) dev-frontend" "$(MAKE) dev-inngest"
 
 dev-backend:
-	$(PYTHON) uvicorn backend.main:app --host 127.0.0.1 --port 8080 --reload --reload-dir backend
+	INNGEST_DEV=1 $(PYTHON) uvicorn backend.main:app --host 127.0.0.1 --port 8080 --reload --reload-dir backend
 
 dev-frontend:
 	pnpm dev:frontend
+
+dev-inngest:
+	pnpm exec inngest dev --host 127.0.0.1 --no-discovery -u http://127.0.0.1:8080/api/inngest
 
 dev-modal-serve:
 	pnpm exec concurrently --kill-others --names modal,web "$(MODAL) modal serve modal_app.py" "pnpm dev:frontend --mode modal-serve"
@@ -53,13 +56,18 @@ build: generate
 	pnpm build
 
 start:
-	$(PYTHON) uvicorn backend.main:app --host 127.0.0.1 --port 8080
+	pnpm exec concurrently --kill-others --names api,inngest "INNGEST_DEV=1 $(PYTHON) uvicorn backend.main:app --host 127.0.0.1 --port 8080" "$(MAKE) dev-inngest"
 
 deploy-python:
 	$(MODAL) modal deploy modal_app.py
+	node --env-file-if-exists=.env scripts/sync-inngest.mjs --if-configured
 
 deploy: build
 	SHEEP_FULL_STACK=1 $(MODAL) modal deploy modal_app.py
+	node --env-file-if-exists=.env scripts/sync-inngest.mjs --if-configured
+
+inngest-sync:
+	node --env-file-if-exists=.env scripts/sync-inngest.mjs
 
 check: build
 	$(PYTHON) ruff check
@@ -69,7 +77,7 @@ check: build
 	pnpm typecheck
 
 test-integration:
-	$(PYTHON) python -m unittest discover -s tests -v
+	INNGEST_DEV=1 $(PYTHON) python -m unittest discover -s tests -v
 
 favicon:
 	pnpm favicon

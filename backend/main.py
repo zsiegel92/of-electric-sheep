@@ -3,6 +3,7 @@ from fastapi import Depends, FastAPI
 from backend.api_keys import router as api_keys_router
 from backend.auth import get_user
 from backend.frontend import router as frontend_router
+from backend.jobs import router as jobs_router
 from backend.oauth import auth_router
 from backend.system_one import router as system_one_router
 from backend.ui import router as ui_router
@@ -14,6 +15,7 @@ app.include_router(auth_router)
 app.include_router(api_keys_router)
 app.include_router(system_one_router)
 app.include_router(ui_router)
+app.include_router(jobs_router, include_in_schema=False)
 app.include_router(frontend_router)
 
 
