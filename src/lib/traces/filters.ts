@@ -1,10 +1,6 @@
 import { z } from "zod";
-import type { decisionTraces } from "@/lib/db/schema";
 
-type ConfidenceSortColumn = keyof Pick<
-  typeof decisionTraces.$inferSelect,
-  "minConfidence" | "averageConfidence"
->;
+type ConfidenceSortColumn = "minConfidence" | "averageConfidence";
 
 type TraceOrderOption = { id: string; label: string } & (
   | { sort: "startedAt"; direction: "desc" }

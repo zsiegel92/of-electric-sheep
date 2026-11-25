@@ -1,5 +1,5 @@
 import { useRouter } from "@tanstack/react-router";
-import { updatePipeline } from "@/server/pipelines";
+import { updatePipeline } from "@/api/pipelines";
 import { EditableName } from "./editable-name";
 
 export function PipelineName({

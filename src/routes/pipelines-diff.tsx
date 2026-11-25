@@ -2,6 +2,11 @@ import { useMutation } from "@tanstack/react-query";
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { z } from "zod";
+import {
+  getPipelineVersions,
+  listPipelines,
+  updateQuestionLinks,
+} from "@/api/pipelines";
 import { PageHeader } from "@/components/page-header";
 import { PipelineComparison } from "@/components/pipeline-diff";
 import { QuestionName } from "@/components/question-name";
@@ -14,11 +19,6 @@ import {
   matchQuestions,
   pipelineQuestionKinds,
 } from "@/lib/decisions/question-links";
-import {
-  getPipelineVersions,
-  listPipelines,
-  updateQuestionLinks,
-} from "@/server/pipelines";
 
 const searchSchema = z.object({
   id1: z.uuid().optional().catch(undefined),

@@ -1,11 +1,5 @@
 import { randomBytes } from "node:crypto";
-import {
-  appendFileSync,
-  existsSync,
-  readFileSync,
-  writeFileSync,
-} from "node:fs";
-import { parseEnv } from "node:util";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 
 const envFile = new URL("../.env", import.meta.url);
 const testKeyPlaceholder = "__LOCAL_SYSTEM_ONE_TEST_API_KEY__";
@@ -43,12 +37,4 @@ if (!existsSync(envFile)) {
       throw error;
     }
   }
-}
-
-const { SYSTEM_ONE_TEST_API_KEY } = parseEnv(readFileSync(envFile, "utf8"));
-if (!SYSTEM_ONE_TEST_API_KEY) {
-  appendFileSync(
-    envFile,
-    `\n# Generated locally by make env using 32 random bytes from Node crypto.\nSYSTEM_ONE_TEST_API_KEY=oes_${randomBytes(32).toString("base64url")}\n`,
-  );
 }

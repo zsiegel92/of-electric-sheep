@@ -1,5 +1,6 @@
 import { createFileRoute, notFound } from "@tanstack/react-router";
 import { z } from "zod";
+import { getDecisionTrace } from "@/api/traces";
 import { ExpandableDataValue } from "@/components/expandable-data-value";
 import { PageHeader } from "@/components/page-header";
 import { PipelineViewLinks } from "@/components/pipeline-view-links";
@@ -9,7 +10,6 @@ import { TraceQuestions } from "@/components/traces/trace-questions";
 import { TraceTime } from "@/components/traces/trace-table";
 import { TraceViewMode } from "@/components/traces/trace-view-mode";
 import { traceId } from "@/lib/traces/schemas";
-import { getDecisionTrace } from "@/server/traces";
 
 export const Route = createFileRoute("/trace/$traceId")({
   validateSearch: z.object({

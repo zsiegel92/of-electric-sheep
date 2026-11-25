@@ -1,6 +1,7 @@
 import { Check } from "lucide-react";
 import { Tooltip } from "radix-ui";
 import { createContext, type ReactNode, useContext, useState } from "react";
+import { saveTraceAnnotation } from "@/api/traces";
 import {
   type Answers,
   AnswerView,
@@ -13,7 +14,6 @@ import {
   type TraceAnnotation,
 } from "@/lib/traces/annotations";
 import { cn } from "@/lib/utils";
-import { saveTraceAnnotation } from "@/server/traces";
 
 type QuestionSave = {
   choiceKey?: string | null;

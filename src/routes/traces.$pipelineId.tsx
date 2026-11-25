@@ -1,6 +1,7 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { ArrowLeft, ArrowRight, Download } from "lucide-react";
 import { z } from "zod";
+import { listPipelineTraces } from "@/api/traces";
 import { PageHeader } from "@/components/page-header";
 import { PipelineEditorLink } from "@/components/pipeline-view-links";
 import { usePipelineQuestions } from "@/components/question-name";
@@ -16,7 +17,6 @@ import {
   traceOrders,
 } from "@/lib/traces/filters";
 import { traceId } from "@/lib/traces/schemas";
-import { listPipelineTraces } from "@/server/traces";
 
 export const Route = createFileRoute("/traces/$pipelineId")({
   validateSearch: z.object({

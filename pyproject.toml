@@ -1,0 +1,39 @@
+[project]
+name = "of-electric-sheep"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi",
+    "httpx",
+    "inngest>=0.5.20",
+    "langfuse>=3",
+    "psycopg[binary,pool]",
+    "pydantic-settings",
+    "pyjwt",
+    "python-multipart",
+    "rfc8785>=0.1.4",
+    "sqlmodel",
+    "uvicorn[standard]",
+    "zstandard",
+]
+
+[project.optional-dependencies]
+modal = ["modal"]
+
+[dependency-groups]
+dev = [
+    "httpx2>=2.16.2",
+    "pyright>=1.1.414",
+    "ruff",
+]
+
+[tool.uv]
+package = false
+
+[tool.pyright]
+include = ["backend", "modal_app.py", "scripts", "tests"]
+venvPath = "."
+venv = ".venv"
+
+[tool.ruff.lint]
+extend-select = ["I"]

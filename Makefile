@@ -1,6 +1,12 @@
-.PHONY: install env db db-stop dev build start check favicon db-generate db-migrate db-studio
+.PHONY: install env db db-stop db-generate db-migrate db-hash db-copy-data generate \
+	dev dev-backend dev-frontend dev-inngest dev-modal-serve dev-frontend-deployed-backend \
+	build start deploy deploy-python inngest-sync check test-integration favicon
+
+PYTHON = uv run --locked
+MODAL = $(PYTHON) --extra modal
 
 install:
+	uv sync --locked --extra modal
 	pnpm install --frozen-lockfile
 
 env:
@@ -12,27 +18,66 @@ db: env
 db-stop:
 	pg_ctl -D .local/postgres -m fast -w stop
 
-dev: db
-	pnpm dev
+db-generate:
+	$(PYTHON) python -m backend.migrate diff "$(or $(NAME),schema)"
 
-build:
+db-migrate:
+	$(PYTHON) python -m backend.migrate apply
+
+db-hash:
+	$(PYTHON) python -m backend.migrate hash
+
+db-copy-data: db-migrate
+	$(PYTHON) python -m backend.copy_data
+
+generate:
+	$(PYTHON) python -m backend.openapi --client
+
+dev: db generate
+	$(MAKE) db-migrate
+	pnpm exec concurrently --kill-others --names api,web,inngest "$(MAKE) dev-backend" "$(MAKE) dev-frontend" "$(MAKE) dev-inngest"
+
+dev-backend:
+	INNGEST_DEV=1 $(PYTHON) uvicorn backend.main:app --host 127.0.0.1 --port 8080 --reload --reload-dir backend
+
+dev-frontend:
+	pnpm dev:frontend
+
+dev-inngest:
+	pnpm exec inngest dev --host 127.0.0.1 --no-discovery -u http://127.0.0.1:8080/api/inngest
+
+dev-modal-serve:
+	pnpm exec concurrently --kill-others --names modal,web "$(MODAL) modal serve modal_app.py" "pnpm dev:frontend --mode modal-serve"
+
+dev-frontend-deployed-backend:
+	pnpm dev:frontend --mode deployed-backend
+
+build: generate
 	pnpm build
 
 start:
-	pnpm start
+	pnpm exec concurrently --kill-others --names api,inngest "INNGEST_DEV=1 $(PYTHON) uvicorn backend.main:app --host 127.0.0.1 --port 8080" "$(MAKE) dev-inngest"
 
-check:
+deploy-python:
+	$(MODAL) modal deploy modal_app.py
+	node --env-file-if-exists=.env scripts/sync-inngest.mjs --if-configured
+
+deploy: build
+	SHEEP_FULL_STACK=1 $(MODAL) modal deploy modal_app.py
+	node --env-file-if-exists=.env scripts/sync-inngest.mjs --if-configured
+
+inngest-sync:
+	node --env-file-if-exists=.env scripts/sync-inngest.mjs
+
+check: build
+	$(PYTHON) ruff check
+	$(PYTHON) ruff format --check
+	$(MODAL) pyright
 	pnpm lint
 	pnpm typecheck
 
+test-integration:
+	INNGEST_DEV=1 $(PYTHON) python -m unittest discover -s tests -v
+
 favicon:
 	pnpm favicon
-
-db-generate:
-	pnpm db:generate
-
-db-migrate:
-	pnpm db:migrate
-
-db-studio:
-	pnpm db:studio
